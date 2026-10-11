@@ -71,7 +71,12 @@ async def predict_emotion(file: UploadFile = File(...)):
 
     # 2. Tiền xử lý DSP (Decoded, VAD Silence Trim, RMS, Adaptive Chunking)
     dsp_start = time.perf_counter()
-    dsp_result = preprocess_audio_pipeline(audio_bytes)
+    try:
+        dsp_result = preprocess_audio_pipeline(audio_bytes)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Lỗi xử lý file âm thanh: {str(e)}")
     dsp_duration_ms = (time.perf_counter() - dsp_start) * 1000.0
 
     if not dsp_result["is_valid"]:
