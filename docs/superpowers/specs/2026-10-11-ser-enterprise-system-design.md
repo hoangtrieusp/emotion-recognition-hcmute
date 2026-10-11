@@ -84,9 +84,12 @@
  │ + Quality Gate Filter:                                                        │
  │   - Duration < 0.5s -> Reject (File quá ngắn)                                 │
  │   - RMS < 0.002     -> Reject (Im lặng hoặc chỉ có tiếng ồn)                  │
- │ + Strategic Chunking & Ensemble:                                              │
- │   - Duration <= 3.5s : Inference 1 lần                                        │
- │   - Duration > 3.5s  : Cắt 2 chunk đầu/cuối 3.5s -> Inference -> Mean Pooling │
+ │ + Adaptive Overlapping Sliding Window (Bao phủ 100% tín hiệu, xóa điểm mù):   │
+ │   - Duration <= 3.5s : Single-pass inference                                  │
+ │   - Duration > 3.5s  : Cửa sổ 3.5s trượt bước nhảy 2.0s (Overlapping 43%)     │
+ │   - Batch Vectorization : Xếp K chunks vào ma trận (K, 56000) -> 1 ONNX call  │
+ │   - Confidence-Weighted Salience Pooling: Trọng số hóa theo độ tập trung      │
+ │     cảm xúc, chống loãng cảm xúc giận dữ/vui bộc phát bởi các đoạn đều đều    │
  └──────────────────────────────────────┬────────────────────────────────────────┘
                                         │ Normalized Tensor (Zero-mean, Unit-var)
                                         ▼
