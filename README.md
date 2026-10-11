@@ -1,4 +1,4 @@
-# ViSEC Speech Emotion Recognition (SER) Enterprise v2.0
+# ViSEC Speech Emotion Recognition (SER)
 
 > **Kiến trúc:** Next.js 16 (App Router, Turbopack) + FastAPI (ASGI) + ONNX Runtime (CUDA / CPU Fallback) + Adaptive DSP Chunking
 > **Dataset:** ViSEC (Vietnamese Social Media Emotion Corpus)
