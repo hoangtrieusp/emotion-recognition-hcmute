@@ -1,7 +1,6 @@
-# ViSEC SER Frontend Client (Next.js 16 + React 19)
+# Giao Diện Nhận Diện Cảm Xúc Giọng Nói Tiếng Việt (Next.js)
 
-> **Giao diện Người dùng Phân loại Cảm xúc Giọng nói Tiếng Việt (ViSEC Dataset)**
-> **Đồ án cuối kỳ trường Đại học Sư phạm Kỹ thuật TP. Hồ Chí Minh (HCMUTE)**
+> **Hệ Thống Nhận Diện Cảm Xúc Qua Giọng Nói Tiếng Việt**
 
 ---
 
@@ -20,14 +19,14 @@
 ```text
 clients/src/
 ├── app/
-│   ├── layout.tsx                # Khung giao diện chuẩn, tối ưu SEO & font
+│   ├── layout.tsx                # Khung giao diện chuẩn, tối ưu font & metadata
 │   ├── page.tsx                  # Controller chính, quản lý state isAnalyzing & gọi API
 │   └── globals.css               # Styling tokens, thanh cuộn tùy biến
 ├── components/
-│   ├── Header.tsx                # Thanh tiêu đề + Badge kiểm tra trạng thái Backend/GPU
+│   ├── Header.tsx                # Thanh tiêu đề và trạng thái kết nối
 │   ├── WaveformVisualizer.tsx    # Dao động ký HTML5 Canvas khi thu âm Micro
-│   ├── AudioInput.tsx            # Thu âm Micro, Kéo thả file & 4 Nút Test Mẫu Nhanh
-│   └── EmotionDashboard.tsx      # Thẻ Cảm xúc Thống trị, 4 Thanh Xác suất & Telemetry
+│   ├── AudioInput.tsx            # Thu âm Micro & Tải lên file âm thanh
+│   └── EmotionDashboard.tsx      # Thẻ Cảm xúc chính, 4 Thanh Xác suất & Thời gian xử lý
 └── hooks/
     └── useAudioRecorder.ts       # Hook Web Audio API (Chuẩn hóa Blob 'audio/webm'/'audio/wav')
 ```
@@ -37,7 +36,7 @@ clients/src/
 ## 3. Các Tính Năng Nổi Bật
 
 1. **Khóa Chống Race Condition (`isAnalyzing` Lock):**
-   - Tự động vô hiệu hóa toàn bộ tương tác (nút Test Nhanh, nút Thu âm, Dropzone) khi đang phân tích để tránh xung đột dữ liệu hoặc giao diện nhảy loạn xạ khi click dồn dập.
+   - Tự động vô hiệu hóa toàn bộ tương tác (nút Thu âm, Tải file) khi đang phân tích để tránh xung đột dữ liệu hoặc giao diện nhảy loạn xạ khi click dồn dập.
    - Tích hợp `AbortController` để hủy bỏ request cũ nếu có yêu cầu mới.
 
 2. **Hook Thu âm Chuẩn Hóa (`useAudioRecorder`):**
@@ -45,8 +44,8 @@ clients/src/
    - Đóng gói file `Blob` với MIME type chuẩn xác trước khi nạp vào `FormData`.
    - Tự động giải phóng `MediaStreamTrack` ngay khi dừng thu âm để trình duyệt tắt icon Micro.
 
-3. **Chỉ số Kỹ thuật Thời gian Thực (Production Telemetry):**
-   - Hiển thị phân tách chi tiết: Thời lượng âm thanh đo được, Năng lượng RMS, Độ trễ DSP (ms), Độ trễ suy luận ONNX (ms), và Tổng thời gian E2E (ms).
+3. **Thông Số Xử Lý Thời Gian Thực:**
+   - Hiển thị phân tách chi tiết: Thời lượng âm thanh đo được, Năng lượng RMS, Thời gian tiền xử lý (ms), Thời gian chạy mô hình AI (ms), và Tổng thời gian xử lý (ms).
 
 ---
 

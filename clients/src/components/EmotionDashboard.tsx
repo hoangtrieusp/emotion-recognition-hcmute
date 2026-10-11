@@ -86,14 +86,14 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
             Đang Phân Tích Cảm Xúc Giọng Nói...
           </h3>
           <p className="text-xs text-slate-500 max-w-sm mt-1">
-            Đang giải mã âm thanh 16kHz Mono, cắt Adaptive Overlapping Chunks và chạy mô hình Wav2Vec2 + BiGRU trên ONNX Runtime.
+            Hệ thống đang tiếp nhận và phân tích dữ liệu âm thanh giọng nói.
           </p>
         </div>
         <div className="w-full max-w-xs space-y-2 pt-2">
           <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
             <div className="h-full bg-indigo-600 animate-pulse rounded-full w-3/4" />
           </div>
-          <span className="text-[11px] text-indigo-600 font-medium">DSP Preprocessing & ONNX Inference</span>
+          <span className="text-[11px] text-indigo-600 font-medium">Đang xử lý âm thanh</span>
         </div>
       </div>
     );
@@ -109,7 +109,7 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
           Chưa Có Dữ Liệu Phân Tích
         </h3>
         <p className="text-xs text-slate-500 max-w-sm mt-1">
-          Vui lòng thu âm từ microphone, tải file âm thanh lên hoặc chọn file mẫu bên trái để hệ thống suy luận cảm xúc.
+          Vui lòng thu âm trực tiếp hoặc tải file âm thanh lên để bắt đầu phân tích cảm xúc.
         </p>
       </div>
     );
@@ -161,7 +161,7 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
           </div>
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Cảm xúc Thống trị
+              Cảm xúc chính
             </span>
             <div className="flex items-baseline space-x-2 mt-0.5">
               <h2 className={`text-2xl font-black ${dominantConfig.color}`}>
@@ -185,7 +185,7 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
       {/* Probabilities Distribution Bars */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">
-          Phân bố Xác suất 4 Cảm xúc (Softmax Probabilities):
+          Phân bố xác suất 4 cảm xúc:
         </h4>
 
         <div className="space-y-3.5">
@@ -219,7 +219,7 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center space-x-1.5">
             <Zap className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Chỉ số Kỹ thuật & Độ trễ (Production Telemetry):</span>
+            <span>Thời gian & Thông số xử lý:</span>
           </h4>
 
           <div className="grid grid-cols-3 gap-2.5 text-center">
@@ -236,7 +236,7 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
               </span>
             </div>
             <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span className="text-[11px] text-slate-500 block">Chunks gối đầu</span>
+              <span className="text-[11px] text-slate-500 block">Số đoạn âm thanh</span>
               <span className="font-bold text-xs text-slate-800">
                 {result.telemetry.num_chunks}
               </span>
@@ -245,19 +245,19 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
 
           <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-3 gap-2.5 text-center">
             <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span className="text-[11px] text-slate-500 block">Tiền xử lý DSP</span>
+              <span className="text-[11px] text-slate-500 block">Tiền xử lý</span>
               <span className="font-bold text-xs text-slate-800">
                 {result.telemetry.dsp_latency_ms} ms
               </span>
             </div>
             <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span className="text-[11px] text-slate-500 block">Suy luận ONNX</span>
+              <span className="text-[11px] text-slate-500 block">Mô hình AI</span>
               <span className="font-bold text-xs text-indigo-700">
                 {result.telemetry.inference_latency_ms} ms
               </span>
             </div>
             <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
-              <span className="text-[11px] text-emerald-700 block font-semibold">Tổng E2E</span>
+              <span className="text-[11px] text-emerald-700 block font-semibold">Tổng thời gian</span>
               <span className="font-extrabold text-xs text-emerald-800">
                 {result.telemetry.total_latency_ms} ms
               </span>

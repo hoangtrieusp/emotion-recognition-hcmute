@@ -80,10 +80,10 @@ export default function Home() {
         <div className="mb-8 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-base font-bold text-slate-900">
-              Hệ Thống Đánh Giá & Phân Loại Cảm Xúc Giọng Nói (ViSEC Dataset)
+              Nhận diện cảm xúc giọng nói tiếng Việt
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Áp dụng kiến trúc <strong>Wav2Vec2 + BiGRU + Self-Attention Pooling + ArcFace Loss</strong>, tối ưu suy luận bằng <strong>ONNX Runtime</strong> và tiền xử lý <strong>Adaptive Overlapping Chunking</strong>.
+              Hệ thống hỗ trợ phân tích và nhận diện 4 trạng thái cảm xúc: Tức giận, Vui vẻ, Bình thường và Buồn bã.
             </p>
           </div>
           <div className="flex items-center space-x-2 bg-indigo-50 border border-indigo-100 text-indigo-800 text-xs px-3.5 py-2 rounded-xl shrink-0 font-medium">
@@ -106,10 +106,10 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Clean Academic Footer */}
+      {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-4 mt-auto">
         <div className="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500 font-medium">
-          Đồ Án Tốt Nghiệp / Báo Cáo Cuối Kỳ · Trường Đại học Sư phạm Kỹ thuật TP. Hồ Chí Minh (HCMUTE) © 2026
+          Hệ Thống Nhận Diện Cảm Xúc Giọng Nói Tiếng Việt © 2026
         </div>
       </footer>
     </div>
