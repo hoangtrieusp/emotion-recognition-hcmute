@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ViSEC SER Frontend Client (Next.js 16 + React 19)
 
-## Getting Started
+> **Giao diện Người dùng Phân loại Cảm xúc Giọng nói Tiếng Việt (ViSEC Dataset)**
+> **Đồ án cuối kỳ trường Đại học Sư phạm Kỹ thuật TP. Hồ Chí Minh (HCMUTE)**
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 1. Công nghệ & Thư viện (Tech Stack)
+
+- **Framework:** [Next.js 16](https://nextjs.org) (App Router, Turbopack)
+- **UI Library:** [React 19](https://react.dev)
+- **Styling:** [Tailwind CSS v4](https://tailwindcss.com) (Modern CSS variables, Light Mode)
+- **Icons:** [Lucide React](https://lucide.dev)
+- **Web Audio API:** Tích hợp `AudioContext` và `AnalyserNode` cho visualizer dao động sóng âm thanh thời gian thực.
+
+---
+
+## 2. Cấu trúc Thành phần (Architecture & Components)
+
+```text
+clients/src/
+├── app/
+│   ├── layout.tsx                # Khung giao diện chuẩn, tối ưu SEO & font
+│   ├── page.tsx                  # Controller chính, quản lý state isAnalyzing & gọi API
+│   └── globals.css               # Styling tokens, thanh cuộn tùy biến
+├── components/
+│   ├── Header.tsx                # Thanh tiêu đề + Badge kiểm tra trạng thái Backend/GPU
+│   ├── WaveformVisualizer.tsx    # Dao động ký HTML5 Canvas khi thu âm Micro
+│   ├── AudioInput.tsx            # Thu âm Micro, Kéo thả file & 4 Nút Test Mẫu Nhanh
+│   └── EmotionDashboard.tsx      # Thẻ Cảm xúc Thống trị, 4 Thanh Xác suất & Telemetry
+└── hooks/
+    └── useAudioRecorder.ts       # Hook Web Audio API (Chuẩn hóa Blob 'audio/webm'/'audio/wav')
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 3. Các Tính Năng Nổi Bật
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **Khóa Chống Race Condition (`isAnalyzing` Lock):**
+   - Tự động vô hiệu hóa toàn bộ tương tác (nút Test Nhanh, nút Thu âm, Dropzone) khi đang phân tích để tránh xung đột dữ liệu hoặc giao diện nhảy loạn xạ khi click dồn dập.
+   - Tích hợp `AbortController` để hủy bỏ request cũ nếu có yêu cầu mới.
 
-## Learn More
+2. **Hook Thu âm Chuẩn Hóa (`useAudioRecorder`):**
+   - Tự động phát hiện codec trình duyệt hỗ trợ (`audio/webm;codecs=opus`, `audio/webm`, `audio/wav`).
+   - Đóng gói file `Blob` với MIME type chuẩn xác trước khi nạp vào `FormData`.
+   - Tự động giải phóng `MediaStreamTrack` ngay khi dừng thu âm để trình duyệt tắt icon Micro.
 
-To learn more about Next.js, take a look at the following resources:
+3. **Chỉ số Kỹ thuật Thời gian Thực (Production Telemetry):**
+   - Hiển thị phân tách chi tiết: Thời lượng âm thanh đo được, Năng lượng RMS, Độ trễ DSP (ms), Độ trễ suy luận ONNX (ms), và Tổng thời gian E2E (ms).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 4. Hướng dẫn Cài đặt & Khởi chạy
 
-## Deploy on Vercel
+### Cài đặt dependencies (nếu clone mới):
+```bash
+npm install
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Chạy môi trường Phát triển (Development Server):
+```bash
+npm run dev
+```
+Truy cập giao diện tại: [http://localhost:3000](http://localhost:3000)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Biên dịch Production Build (Kiểm tra Type-Safety):
+```bash
+npm run build
+```
+Đạt chuẩn **100% Type-safe**, 0 lỗi TypeScript và ESLint.
