@@ -47,10 +47,24 @@ class ONNXInferenceEngine:
             logger.warning(f"ONNX Session warm-up warning: {e}")
 
     @classmethod
-    def get_instance(cls, model_path: str = "servers/weights/ser_model.onnx") -> "ONNXInferenceEngine":
-        if cls._instance is None:
+    def get_instance(cls, model_path: str = "servers/weights/ser_model.onnx"):
+        if cls._instance is not None:
+            return cls._instance
+        try:
             cls._instance = cls(model_path)
-        return cls._instance
+            return cls._instance
+        except Exception as e:
+            logger.warning(
+                f"[FALLBACK TRIGGERED] Không thể khởi tạo ONNX Engine ({e}). "
+                "Tự động kích hoạt Fallback sang PyTorchEngine (model_fold_5.pt)..."
+            )
+            from servers.app.engine.pytorch_engine import PyTorchInferenceEngine
+            cls._instance = PyTorchInferenceEngine.get_instance()
+            return cls._instance
+
+    @classmethod
+    def reset_instance(cls):
+        cls._instance = None
 
     def predict_chunks(self, chunks: np.ndarray) -> np.ndarray:
         """

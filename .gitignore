@@ -1,8 +1,35 @@
+# Model Weights & Binary Checkpoints
 *.pt
+*.bin
 *.onnx
-MODELs/model/
+model_fold_*.pt
 servers/weights/
+MODELs/model/
+
+# Python & Environment
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+.cache/
+.env
+.env.local
+.env.*.local
+
+# Node.js & Next.js Build Artifacts
 clients/node_modules/
 clients/.next/
-__pycache__/
-*.pyc
+clients/.turbo/
+clients/dist/
+clients/build/
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project Documentation & Task Plans (Keep repo lean)
+docs/
