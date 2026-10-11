@@ -1,2 +1,8 @@
 *.pt
+*.onnx
 MODELs/model/
+servers/weights/
+clients/node_modules/
+clients/.next/
+__pycache__/
+*.pyc
