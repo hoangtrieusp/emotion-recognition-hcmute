@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { AlertTriangle, Clock, Zap, BarChart2, Flame, Smile, Meh, Frown } from "lucide-react";
+import { AlertTriangle, Clock, Zap, BarChart2, Flame, Smile, Meh, Frown, RefreshCw } from "lucide-react";
 
 export interface PredictionResult {
   status: "success" | "warning" | "error";
@@ -21,6 +21,7 @@ export interface PredictionResult {
 
 interface EmotionDashboardProps {
   result: PredictionResult | null;
+  isAnalyzing?: boolean;
 }
 
 const EMOTION_CONFIG: Record<
@@ -73,7 +74,31 @@ const EMOTION_CONFIG: Record<
   },
 };
 
-export default function EmotionDashboard({ result }: EmotionDashboardProps) {
+export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboardProps) {
+  if (isAnalyzing) {
+    return (
+      <div className="bg-white rounded-2xl border border-indigo-200 p-8 shadow-sm flex flex-col items-center justify-center text-center h-full min-h-[380px] space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center animate-pulse">
+          <RefreshCw className="w-8 h-8 animate-spin" />
+        </div>
+        <div>
+          <h3 className="text-base font-bold text-slate-800">
+            Đang Phân Tích Cảm Xúc Giọng Nói...
+          </h3>
+          <p className="text-xs text-slate-500 max-w-sm mt-1">
+            Đang giải mã âm thanh 16kHz Mono, cắt Adaptive Overlapping Chunks và chạy mô hình Wav2Vec2 + BiGRU trên ONNX Runtime.
+          </p>
+        </div>
+        <div className="w-full max-w-xs space-y-2 pt-2">
+          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+            <div className="h-full bg-indigo-600 animate-pulse rounded-full w-3/4" />
+          </div>
+          <span className="text-[11px] text-indigo-600 font-medium">DSP Preprocessing & ONNX Inference</span>
+        </div>
+      </div>
+    );
+  }
+
   if (!result) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm flex flex-col items-center justify-center text-center h-full min-h-[380px]">

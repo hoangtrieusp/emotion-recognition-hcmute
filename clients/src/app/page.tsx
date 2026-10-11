@@ -8,10 +8,21 @@ import { Info } from "lucide-react";
 
 export default function Home() {
   const [result, setResult] = useState<PredictionResult | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
 
   const handleAnalyze = async (fileOrBlob: File | Blob) => {
-    setIsLoading(true);
+    // 1. Chống Race Condition: Nếu đang phân tích thì block ngay lập tức
+    if (isAnalyzing) return;
+
+    // Hủy request trước đó nếu còn đang treo
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setIsAnalyzing(true);
     setResult(null);
 
     try {
@@ -19,12 +30,20 @@ export default function Home() {
       if (fileOrBlob instanceof File) {
         formData.append("file", fileOrBlob, fileOrBlob.name);
       } else {
-        formData.append("file", fileOrBlob, "microphone_recording.webm");
+        // Chốt chặn 2: Đảm bảo Blob luôn được bọc thành File với MIME type chuẩn xác ('audio/webm' hoặc 'audio/wav')
+        const rawType = fileOrBlob.type || "audio/webm";
+        const cleanType = rawType.includes("wav") ? "audio/wav" : "audio/webm";
+        const extension = cleanType === "audio/wav" ? "wav" : "webm";
+        const audioFile = new File([fileOrBlob], `microphone_recording.${extension}`, {
+          type: cleanType,
+        });
+        formData.append("file", audioFile, audioFile.name);
       }
 
       const response = await fetch("http://127.0.0.1:8000/api/v1/predict/emotion", {
         method: "POST",
         body: formData,
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -38,13 +57,17 @@ export default function Home() {
 
       const data = await response.json();
       setResult(data);
-    } catch (err) {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return; // Bỏ qua nếu bị abort do người dùng
+      }
       setResult({
         status: "error",
         error: `Không thể kết nối đến Backend API (http://127.0.0.1:8000). Vui lòng đảm bảo FastAPI backend đang chạy: ${String(err)}`,
       });
     } finally {
-      setIsLoading(false);
+      setIsAnalyzing(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -73,12 +96,12 @@ export default function Home() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Left Column: Audio Input & Recording (7 cols) */}
           <div className="lg:col-span-7">
-            <AudioInput onAnalyze={handleAnalyze} isLoading={isLoading} />
+            <AudioInput onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing} />
           </div>
 
           {/* Right Column: Emotion Analysis Results (5 cols) */}
           <div className="lg:col-span-5">
-            <EmotionDashboard result={result} />
+            <EmotionDashboard result={result} isAnalyzing={isAnalyzing} />
           </div>
         </div>
       </main>

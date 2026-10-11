@@ -18,27 +18,31 @@ def decode_audio_bytes(audio_bytes: bytes) -> Tuple[np.ndarray, int]:
     """
     try:
         # Thử đọc nhanh bằng soundfile trước (rất nhanh với WAV, FLAC, OGG chuẩn)
-        data, sr = sf.read(io.BytesIO(audio_bytes), dtype="float32")
-        if data.ndim > 1:
-            data = np.mean(data, axis=1) # Chuyển stereo -> mono
+        with io.BytesIO(audio_bytes) as bio:
+            data, sr = sf.read(bio, dtype="float32")
+            if data.ndim > 1:
+                data = np.mean(data, axis=1) # Chuyển stereo -> mono
     except Exception:
         # Fallback qua pydub (hỗ trợ ffmpeg đọc WebM, M4A, MP3, etc.)
         try:
-            segment = AudioSegment.from_file(io.BytesIO(audio_bytes))
-            segment = segment.set_frame_rate(TARGET_SR).set_channels(1)
-            raw_samples = np.array(segment.get_array_of_samples())
-            
-            if len(raw_samples) == 0:
-                raise ValueError("File âm thanh không chứa mẫu tín hiệu hợp lệ.")
+            with io.BytesIO(audio_bytes) as bio:
+                segment = AudioSegment.from_file(bio)
+                segment = segment.set_frame_rate(TARGET_SR).set_channels(1)
+                raw_samples = np.array(segment.get_array_of_samples())
+                
+                if len(raw_samples) == 0:
+                    raise ValueError("File âm thanh không chứa mẫu tín hiệu hợp lệ.")
 
-            # Chuẩn hóa về [-1.0, 1.0] dựa theo bit depth
-            if segment.sample_width == 2:
-                data = raw_samples.astype(np.float32) / 32768.0
-            elif segment.sample_width == 4:
-                data = raw_samples.astype(np.float32) / 2147483648.0
-            else:
-                data = raw_samples.astype(np.float32) / (2 ** (segment.sample_width * 8 - 1))
-            sr = TARGET_SR
+                # Chuẩn hóa về [-1.0, 1.0] dựa theo bit depth
+                if segment.sample_width == 2:
+                    data = raw_samples.astype(np.float32) / 32768.0
+                elif segment.sample_width == 4:
+                    data = raw_samples.astype(np.float32) / 2147483648.0
+                else:
+                    data = raw_samples.astype(np.float32) / (2 ** (segment.sample_width * 8 - 1))
+                sr = TARGET_SR
+                del segment
+                del raw_samples
         except Exception as e:
             raise ValueError(f"Không thể giải mã dữ liệu âm thanh. File có thể bị hỏng hoặc sai định dạng: {str(e)}")
 
