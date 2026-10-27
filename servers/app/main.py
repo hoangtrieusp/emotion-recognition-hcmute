@@ -1,34 +1,79 @@
 import os
+import sys
 import time
 import logging
 from contextlib import asynccontextmanager
+from typing import Optional
+import psutil
 import numpy as np
+
+# UTF-8 standard streams on Windows
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from servers.app.schemas import EmotionPredictionResponse, HealthResponse, Telemetry
+from servers.app.schemas import EmotionPredictionResponse, HealthResponse, Telemetry, SystemMetrics
 from servers.app.core.audio_processor import preprocess_audio_pipeline, aggregate_salience_probabilities
 from servers.app.engine.onnx_engine import ONNXInferenceEngine, EMOTION_MAPPING
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
 logger = logging.getLogger("ser_api")
 
-engine: ONNXInferenceEngine = None
+engine: Optional[ONNXInferenceEngine] = None
+
+def collect_system_metrics() -> SystemMetrics:
+    """Thu thập thông số tài nguyên hệ thống (CPU, RAM, GPU VRAM)."""
+    cpu_pct = float(psutil.cpu_percent(interval=None))
+    mem = psutil.virtual_memory()
+    ram_used_mb = round(mem.used / (1024 * 1024), 1)
+    ram_total_mb = round(mem.total / (1024 * 1024), 1)
+
+    vram_used_mb: Optional[float] = None
+    vram_total_mb: Optional[float] = None
+    gpu_name: Optional[str] = None
+
+    try:
+        import torch
+        if torch.cuda.is_available():
+            vram_used_mb = round(torch.cuda.memory_allocated() / (1024 * 1024), 1)
+            props = torch.cuda.get_device_properties(0)
+            vram_total_mb = round(props.total_memory / (1024 * 1024), 1)
+            gpu_name = torch.cuda.get_device_name(0)
+    except Exception as e:
+        logger.debug(f"Không thể truy xuất thông tin CUDA VRAM: {e}")
+
+    return SystemMetrics(
+        cpu_usage_percent=cpu_pct,
+        ram_used_mb=ram_used_mb,
+        ram_total_mb=ram_total_mb,
+        vram_used_mb=vram_used_mb,
+        vram_total_mb=vram_total_mb,
+        gpu_name=gpu_name,
+    )
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global engine
-    logger.info("Initializing SER Engine Enterprise v2.0...")
-    model_path = os.path.join(os.getcwd(), "servers", "weights", "ser_model.onnx")
-    engine = ONNXInferenceEngine.get_instance(model_path)
-    logger.info(f"Engine ready on {engine.device_name} (Provider: {engine.active_provider})")
+    logger.info("Khởi động hệ thống ViSEC SER Enterprise v2.0...")
+    engine = ONNXInferenceEngine.get_instance()
+    logger.info(f"Engine sẵn sàng phục vụ trên: {engine.device_name} (Provider: {engine.active_provider})")
+    psutil.cpu_percent(interval=None)
     yield
-    logger.info("Shutting down SER Engine...")
+    logger.info("Đang tắt hệ thống ViSEC SER Enterprise...")
 
 app = FastAPI(
     title="ViSEC SER Enterprise Engine",
-    description="High-Performance Speech Emotion Recognition API (FastAPI + ONNX Runtime)",
+    description="High-Performance Speech Emotion Recognition API (FastAPI + ONNX Runtime Dual-Engine)",
     version="2.0",
     lifespan=lifespan
 )
@@ -53,25 +98,37 @@ app.add_middleware(
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
+    """Kiểm tra trạng thái sức khỏe dịch vụ và thông số phần cứng."""
+    metrics = collect_system_metrics()
     if engine is None:
-        return HealthResponse(status="starting", device="unknown", active_provider="none", model_loaded=False)
+        return HealthResponse(
+            status="starting",
+            device="unknown",
+            active_provider="none",
+            model_loaded=False,
+            system_metrics=metrics
+        )
     status_info = engine.get_status()
     return HealthResponse(
         status="online",
         device=status_info["device"],
         active_provider=status_info["active_provider"],
-        model_loaded=True
+        model_loaded=True,
+        system_metrics=metrics
     )
 
 @app.post("/api/v1/predict/emotion", response_model=EmotionPredictionResponse)
 async def predict_emotion(file: UploadFile = File(...)):
     """
-    Endpoint chính nhận diện cảm xúc từ file audio tải lên hoặc từ micro browser.
+    Nhận diện cảm xúc từ file audio tải lên hoặc từ micro browser (Zero-Disk I/O).
     """
+    if engine is None:
+        raise HTTPException(status_code=503, detail="Mô hình AI chưa sẵn sàng hoặc đang khởi động.")
+
     total_start = time.perf_counter()
     
     try:
-        # 1. Đọc audio bytes bất đồng bộ
+        # 1. Đọc audio bytes vào bộ nhớ RAM
         try:
             audio_bytes = await file.read()
         except Exception as e:
@@ -80,14 +137,14 @@ async def predict_emotion(file: UploadFile = File(...)):
         if not audio_bytes or len(audio_bytes) == 0:
             raise HTTPException(status_code=400, detail="File âm thanh rỗng.")
 
-        # 2. Tiền xử lý DSP (Decoded, VAD Silence Trim, RMS, Adaptive Chunking)
+        # 2. Tiền xử lý tín hiệu DSP
         dsp_start = time.perf_counter()
         try:
             dsp_result = preprocess_audio_pipeline(audio_bytes)
         except ValueError as ve:
             raise HTTPException(status_code=400, detail=str(ve))
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Lỗi xử lý file âm thanh: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Lỗi tiền xử lý tín hiệu: {str(e)}")
         dsp_duration_ms = (time.perf_counter() - dsp_start) * 1000.0
 
         if not dsp_result["is_valid"]:
@@ -112,11 +169,11 @@ async def predict_emotion(file: UploadFile = File(...)):
 
         # 3. Suy luận AI qua ONNX Runtime (Dynamic Batch Inference)
         infer_start = time.perf_counter()
-        chunks = dsp_result["chunks"] # (K, 56000)
-        chunk_probs = engine.predict_chunks(chunks) # (K, 4)
+        chunks = dsp_result["chunks"]
+        chunk_probs = engine.predict_chunks(chunks)
         infer_duration_ms = (time.perf_counter() - infer_start) * 1000.0
 
-        # 4. Tổng hợp xác suất theo Salience Pooling
+        # 4. Tập hợp xác suất Salience Pooling
         final_probs = aggregate_salience_probabilities(chunk_probs)
         
         probabilities = {

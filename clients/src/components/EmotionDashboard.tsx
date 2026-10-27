@@ -219,24 +219,24 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center space-x-1.5">
             <Zap className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Thời gian & Thông số xử lý:</span>
+            <span>Thông số đo lường hiệu năng (Telemetry & Latency):</span>
           </h4>
 
           <div className="grid grid-cols-3 gap-2.5 text-center">
             <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span className="text-[11px] text-slate-500 block">Thời lượng</span>
+              <span className="text-[11px] text-slate-500 block font-medium">Thời lượng Audio</span>
               <span className="font-bold text-xs text-slate-800">
                 {result.telemetry.duration}s
               </span>
             </div>
             <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span className="text-[11px] text-slate-500 block">Năng lượng RMS</span>
+              <span className="text-[11px] text-slate-500 block font-medium">Năng lượng RMS</span>
               <span className="font-bold text-xs text-slate-800">
                 {result.telemetry.rms}
               </span>
             </div>
             <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span className="text-[11px] text-slate-500 block">Số đoạn âm thanh</span>
+              <span className="text-[11px] text-slate-500 block font-medium">Số Chunks trượt</span>
               <span className="font-bold text-xs text-slate-800">
                 {result.telemetry.num_chunks}
               </span>
@@ -245,19 +245,19 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
 
           <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-3 gap-2.5 text-center">
             <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span className="text-[11px] text-slate-500 block">Tiền xử lý</span>
+              <span className="text-[11px] text-slate-500 block font-medium">DSP Latency</span>
               <span className="font-bold text-xs text-slate-800">
                 {result.telemetry.dsp_latency_ms} ms
               </span>
             </div>
             <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-              <span className="text-[11px] text-slate-500 block">Mô hình AI</span>
+              <span className="text-[11px] text-slate-500 block font-medium">ONNX Latency</span>
               <span className="font-bold text-xs text-indigo-700">
                 {result.telemetry.inference_latency_ms} ms
               </span>
             </div>
             <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
-              <span className="text-[11px] text-emerald-700 block font-semibold">Tổng thời gian</span>
+              <span className="text-[11px] text-emerald-700 block font-semibold">Total E2E</span>
               <span className="font-extrabold text-xs text-emerald-800">
                 {result.telemetry.total_latency_ms} ms
               </span>

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Mic, Square, Upload, Play, Pause, FileAudio, RefreshCw } from "lucide-react";
+import { Mic, Square, Upload, Play, Pause, FileAudio, RefreshCw, Flame, Smile, Meh, Frown, Sparkles } from "lucide-react";
 import WaveformVisualizer from "./WaveformVisualizer";
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
 
@@ -11,11 +11,61 @@ interface AudioInputProps {
   isLoading?: boolean;
 }
 
+interface BenchmarkSample {
+  id: string;
+  name: string;
+  english: string;
+  filename: string;
+  icon: React.ReactNode;
+  btnStyle: string;
+  activeStyle: string;
+}
+
+const BENCHMARK_SAMPLES: BenchmarkSample[] = [
+  {
+    id: "angry",
+    name: "Tức giận",
+    english: "Angry",
+    filename: "angry_sample.wav",
+    icon: <Flame className="w-4 h-4 text-rose-600" />,
+    btnStyle: "bg-rose-50/70 border-rose-200 text-rose-800 hover:bg-rose-100 hover:border-rose-300",
+    activeStyle: "ring-2 ring-rose-500 bg-rose-100 border-rose-400",
+  },
+  {
+    id: "happy",
+    name: "Vui vẻ",
+    english: "Happy",
+    filename: "happy_sample.wav",
+    icon: <Smile className="w-4 h-4 text-emerald-600" />,
+    btnStyle: "bg-emerald-50/70 border-emerald-200 text-emerald-800 hover:bg-emerald-100 hover:border-emerald-300",
+    activeStyle: "ring-2 ring-emerald-500 bg-emerald-100 border-emerald-400",
+  },
+  {
+    id: "neutral",
+    name: "Bình thường",
+    english: "Neutral",
+    filename: "neutral_sample.wav",
+    icon: <Meh className="w-4 h-4 text-slate-600" />,
+    btnStyle: "bg-slate-100/70 border-slate-200 text-slate-800 hover:bg-slate-200/80 hover:border-slate-300",
+    activeStyle: "ring-2 ring-slate-500 bg-slate-200 border-slate-400",
+  },
+  {
+    id: "sad",
+    name: "Buồn bã",
+    english: "Sad",
+    filename: "sad_sample.wav",
+    icon: <Frown className="w-4 h-4 text-indigo-600" />,
+    btnStyle: "bg-indigo-50/70 border-indigo-200 text-indigo-800 hover:bg-indigo-100 hover:border-indigo-300",
+    activeStyle: "ring-2 ring-indigo-500 bg-indigo-100 border-indigo-400",
+  },
+];
+
 export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioInputProps) {
   const effectiveAnalyzing = isAnalyzing ?? isLoading ?? false;
   const [activeTab, setActiveTab] = useState<"mic" | "upload">("mic");
+  const [activeSampleId, setActiveSampleId] = useState<string | null>(null);
 
-  // Audio Recorder Hook
+  // Audio Recorder Hook (Web Audio API)
   const {
     isRecording,
     recordDuration,
@@ -52,9 +102,36 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
   const handleFileChange = (file: File) => {
     if (effectiveAnalyzing) return;
     resetRecording();
+    setActiveSampleId(null);
     setSelectedFile(file);
     if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
     setFilePreviewUrl(URL.createObjectURL(file));
+  };
+
+  // Handle Benchmark Preset Click
+  const handleSelectSample = async (sample: BenchmarkSample) => {
+    if (effectiveAnalyzing || isRecording) return;
+    try {
+      setActiveSampleId(sample.id);
+      resetRecording();
+
+      const response = await fetch(`/samples/${sample.filename}`);
+      if (!response.ok) {
+        throw new Error(`Không thể nạp file mẫu ${sample.filename}`);
+      }
+      const blob = await response.blob();
+      const sampleFile = new File([blob], sample.filename, { type: "audio/wav" });
+      
+      setSelectedFile(sampleFile);
+      if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
+      setFilePreviewUrl(URL.createObjectURL(sampleFile));
+
+      // Tự động kích hoạt suy luận ngay lập tức phục vụ demo bảo vệ đồ án
+      onAnalyze(sampleFile);
+    } catch (err) {
+      console.error("Lỗi nạp mẫu âm thanh:", err);
+      setActiveSampleId(null);
+    }
   };
 
   // Handle Play/Pause
@@ -92,7 +169,10 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
         <button
           type="button"
           disabled={effectiveAnalyzing || isRecording}
-          onClick={() => setActiveTab("mic")}
+          onClick={() => {
+            setActiveTab("mic");
+            setActiveSampleId(null);
+          }}
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
             activeTab === "mic"
               ? "bg-indigo-600 text-white shadow-sm shadow-indigo-100"
@@ -105,7 +185,10 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
         <button
           type="button"
           disabled={effectiveAnalyzing || isRecording}
-          onClick={() => setActiveTab("upload")}
+          onClick={() => {
+            setActiveTab("upload");
+            setActiveSampleId(null);
+          }}
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
             activeTab === "upload"
               ? "bg-indigo-600 text-white shadow-sm shadow-indigo-100"
@@ -181,7 +264,7 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
               Kéo thả hoặc nhấp để chọn file âm thanh
             </p>
             <p className="text-xs text-slate-500 mt-1">
-              Hỗ trợ WAV, MP3, M4A, OGG, WEBM
+              Hỗ trợ WAV, MP3, M4A, OGG, WEBM, FLAC
             </p>
             <input
               type="file"
@@ -210,6 +293,44 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
         </div>
       )}
 
+      {/* 4 Nút Mẫu Test Nhanh (Preset Benchmark Buttons) */}
+      <div className="mt-6 pt-5 border-t border-slate-100">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center space-x-1.5 text-xs font-bold uppercase tracking-wider text-slate-600">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Mẫu thử nhanh (Benchmark Presets):</span>
+          </div>
+          <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
+            Tự động nạp mẫu & phân tích 1 chạm
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {BENCHMARK_SAMPLES.map((sample) => {
+            const isActive = activeSampleId === sample.id;
+            return (
+              <button
+                key={sample.id}
+                type="button"
+                disabled={effectiveAnalyzing || isRecording}
+                onClick={() => handleSelectSample(sample)}
+                className={`flex items-center justify-center space-x-2 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all shadow-sm ${
+                  sample.btnStyle
+                } ${isActive ? sample.activeStyle : ""} ${
+                  effectiveAnalyzing || isRecording ? "opacity-50 cursor-not-allowed" : "hover:scale-[1.02] active:scale-[0.98]"
+                }`}
+              >
+                {sample.icon}
+                <div className="text-left">
+                  <div className="leading-tight">{sample.name}</div>
+                  <div className="text-[10px] opacity-70 font-medium">({sample.english})</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Audio Playback Preview & Submit Button */}
       {currentPreviewUrl && (
         <div className="mt-6 pt-5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -217,13 +338,18 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
             <button
               type="button"
               onClick={togglePlayAudio}
-              className="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-900 text-white flex items-center justify-center shadow-sm shrink-0"
+              className="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-900 text-white flex items-center justify-center shadow-sm shrink-0 transition-transform active:scale-95"
             >
               {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
             </button>
-            <span className="text-xs font-semibold text-slate-600">
-              Nghe lại đoạn âm thanh
-            </span>
+            <div className="text-left">
+              <span className="text-xs font-bold text-slate-700 block">
+                Nghe lại đoạn âm thanh
+              </span>
+              <span className="text-[11px] text-slate-500">
+                {selectedFile ? selectedFile.name : `Microphone (${recordDuration}s)`}
+              </span>
+            </div>
             <audio
               ref={audioPlayerRef}
               src={currentPreviewUrl}
@@ -239,13 +365,13 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
             className={`w-full sm:w-auto flex items-center justify-center space-x-2 px-6 py-3 rounded-xl font-bold text-sm shadow-md transition-all ${
               !hasAudioReady || effectiveAnalyzing
                 ? "bg-slate-200 text-slate-400 cursor-not-allowed pointer-events-none"
-                : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200 hover:shadow-lg"
+                : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200 hover:shadow-lg active:scale-95"
             }`}
           >
             {effectiveAnalyzing ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Đang phân tích cảm xúc...</span>
+                <span>ĐANG PHÂN TÍCH...</span>
               </>
             ) : (
               <>

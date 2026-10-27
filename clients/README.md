@@ -44,8 +44,12 @@ clients/src/
    - Đóng gói file `Blob` với MIME type chuẩn xác trước khi nạp vào `FormData`.
    - Tự động giải phóng `MediaStreamTrack` ngay khi dừng thu âm để trình duyệt tắt icon Micro.
 
-3. **Thông Số Xử Lý Thời Gian Thực:**
-   - Hiển thị phân tách chi tiết: Thời lượng âm thanh đo được, Năng lượng RMS, Thời gian tiền xử lý (ms), Thời gian chạy mô hình AI (ms), và Tổng thời gian xử lý (ms).
+3. **4 Nút Kiểm Thử Nhanh (Benchmark Presets):**
+   - Hỗ trợ 4 nút bấm kiểm thử 1 chạm tương ứng 4 cảm xúc ViSEC (Tức giận, Vui vẻ, Bình thường, Buồn bã) từ `/public/samples/`.
+   - Tự động nạp file mẫu vào trình phát preview và kích hoạt suy luận ngay lập tức phục vụ demo bảo vệ hội đồng.
+
+4. **Thông Số Xử Lý Thời Gian Thực (Telemetry):**
+   - Hiển thị phân tách chi tiết: Thời lượng âm thanh đo được, Năng lượng RMS, Số chunks trượt, DSP Latency (ms), ONNX Latency (ms), và Total E2E Latency (ms).
 
 ---
 
