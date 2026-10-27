@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Mic, Square, Upload, Play, Pause, FileAudio, RefreshCw, AlertCircle } from "lucide-react";
 import WaveformVisualizer from "./WaveformVisualizer";
-import { useAudioRecorder } from "../hooks/useAudioRecorder";
 
 interface AudioInputProps {
   onAnalyze: (file: File | Blob) => void;
@@ -15,20 +14,15 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
   const effectiveAnalyzing = isAnalyzing ?? isLoading ?? false;
   const [activeTab, setActiveTab] = useState<"mic" | "upload">("mic");
 
-  // Audio Recorder Hook (Web Audio API)
-  const {
-    isRecording,
-    recordDuration,
-    recordedBlob,
-    audioPreviewUrl: recorderPreviewUrl,
-    audioStream,
-    error: recorderError,
-    startRecording,
-    stopRecording,
-    resetRecording,
-  } = useAudioRecorder();
+  // Microphone state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordDuration, setRecordDuration] = useState(0);
+  const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
+  const [micBlob, setMicBlob] = useState<Blob | null>(null);
+  const [micPreviewUrl, setMicPreviewUrl] = useState<string | null>(null);
+  const [recorderError, setRecorderError] = useState<string | null>(null);
 
-  // File upload state (Riêng biệt cho Tab Upload)
+  // File upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
 
@@ -36,62 +30,178 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
   const [isPlaying, setIsPlaying] = useState(false);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
-  // Cách ly hoàn toàn State giữa 2 Tab:
-  // - Tab Mic: dùng recorderPreviewUrl và recordedBlob
-  // - Tab Upload: dùng filePreviewUrl và selectedFile
-  const currentPreviewUrl = activeTab === "mic" ? recorderPreviewUrl : filePreviewUrl;
-  const currentAudioName =
+  // Refs for recorder lifecycle
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Current active preview URL and name based on tab
+  const currentPreviewUrl = activeTab === "mic" ? micPreviewUrl : filePreviewUrl;
+  const hasAudioReady = Boolean(activeTab === "mic" ? micBlob : selectedFile);
+  const displayAudioName =
     activeTab === "mic"
-      ? `Bản thu âm Microphone (${recordDuration}s)`
-      : selectedFile?.name || "File tải lên";
+      ? micBlob
+        ? `Bản thu âm Microphone (${recordDuration}s)`
+        : ""
+      : selectedFile
+      ? selectedFile.name
+      : "";
 
-  const hasAudioReady =
-    activeTab === "mic" ? Boolean(recordedBlob) : Boolean(selectedFile);
-
-  // Cleanup file preview URL khi đổi file hoặc unmount
+  // Cleanup object URLs on unmount
   useEffect(() => {
     return () => {
-      if (filePreviewUrl) {
-        URL.revokeObjectURL(filePreviewUrl);
+      if (micPreviewUrl) URL.revokeObjectURL(micPreviewUrl);
+      if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {}
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [filePreviewUrl]);
+  }, [micPreviewUrl, filePreviewUrl]);
 
-  // Đổi preview URL thì reset trạng thái phát nhạc
-  useEffect(() => {
-    setIsPlaying(false);
-    if (audioPlayerRef.current) {
-      audioPlayerRef.current.pause();
-      audioPlayerRef.current.currentTime = 0;
-    }
-  }, [currentPreviewUrl]);
+  // Bắt đầu thu âm Microphone
+  const startRecording = async () => {
+    if (effectiveAnalyzing) return;
+    try {
+      setRecorderError(null);
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+      }
+      setIsPlaying(false);
 
-  // Chuyển Tab: Dừng phát nhạc để tránh xung đột
-  const handleSwitchTab = (tab: "mic" | "upload") => {
-    if (effectiveAnalyzing || isRecording) return;
-    setIsPlaying(false);
-    if (audioPlayerRef.current) {
-      audioPlayerRef.current.pause();
+      // Xóa bản thu âm mic cũ
+      if (micPreviewUrl) {
+        URL.revokeObjectURL(micPreviewUrl);
+        setMicPreviewUrl(null);
+      }
+      setMicBlob(null);
+
+      // Xin quyền Microphone
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      streamRef.current = stream;
+      setAudioStream(stream);
+
+      // Xác định mimeType tốt nhất được trình duyệt hỗ trợ
+      let mimeType = "audio/webm";
+      if (typeof MediaRecorder !== "undefined") {
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+          mimeType = "audio/webm;codecs=opus";
+        } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+          mimeType = "audio/webm";
+        } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+          mimeType = "audio/mp4";
+        } else if (MediaRecorder.isTypeSupported("audio/ogg")) {
+          mimeType = "audio/ogg";
+        }
+      }
+
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const finalMime = recorder.mimeType || mimeType || "audio/webm";
+        const cleanType = finalMime.includes("wav")
+          ? "audio/wav"
+          : finalMime.includes("mp4")
+          ? "audio/mp4"
+          : "audio/webm";
+
+        const blob = new Blob(chunksRef.current, { type: cleanType });
+        setMicBlob(blob);
+        const url = URL.createObjectURL(blob);
+        setMicPreviewUrl(url);
+
+        // Giải phóng audio stream tracks
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
+        }
+        setAudioStream(null);
+      };
+
+      recorder.start(100);
+      setIsRecording(true);
+      startTimeRef.current = Date.now();
+      setRecordDuration(0);
+
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        setRecordDuration(elapsed);
+      }, 500);
+    } catch (err: unknown) {
+      console.error("Microphone error:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setRecorderError("Không thể truy cập Microphone: " + msg);
+      setIsRecording(false);
+      if (timerRef.current) clearInterval(timerRef.current);
     }
-    setActiveTab(tab);
   };
 
-  // Xử lý chọn file từ ổ đĩa
+  // Dừng thu âm
+  const stopRecording = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (mediaRecorderRef.current && isRecording) {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {
+        console.error("Stop recorder error:", e);
+      }
+      setIsRecording(false);
+    }
+
+    if (startTimeRef.current > 0) {
+      const totalSec = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
+      setRecordDuration(totalSec);
+    }
+  };
+
+  // Chọn file âm thanh từ ổ đĩa
   const handleFileChange = (file: File) => {
     if (effectiveAnalyzing) return;
-    setSelectedFile(file);
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+    }
+    setIsPlaying(false);
+
     if (filePreviewUrl) URL.revokeObjectURL(filePreviewUrl);
+    setSelectedFile(file);
     setFilePreviewUrl(URL.createObjectURL(file));
   };
 
-  // Bắt đầu thu âm: Dừng nhạc và gọi hook
-  const handleStartRecording = async () => {
-    if (effectiveAnalyzing) return;
-    setIsPlaying(false);
+  // Chuyển Tab
+  const handleSwitchTab = (tab: "mic" | "upload") => {
+    if (effectiveAnalyzing || isRecording) return;
     if (audioPlayerRef.current) {
       audioPlayerRef.current.pause();
     }
-    await startRecording();
+    setIsPlaying(false);
+    setActiveTab(tab);
   };
 
   // Điều khiển Phát/Dừng nghe lại
@@ -113,11 +223,11 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
     setIsPlaying(false);
   };
 
-  // Gửi âm thanh đi phân tích: Đúng tab nào gửi dữ liệu tab đó
+  // Gửi âm thanh đi phân tích
   const handleSubmitAnalysis = () => {
     if (effectiveAnalyzing) return;
-    if (activeTab === "mic" && recordedBlob) {
-      onAnalyze(recordedBlob);
+    if (activeTab === "mic" && micBlob) {
+      onAnalyze(micBlob);
     } else if (activeTab === "upload" && selectedFile) {
       onAnalyze(selectedFile);
     }
@@ -172,14 +282,14 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
               {!isRecording ? (
                 <button
                   type="button"
-                  onClick={handleStartRecording}
+                  onClick={startRecording}
                   disabled={effectiveAnalyzing}
                   className={`flex items-center space-x-2 bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl font-semibold text-sm shadow-sm transition-all ${
                     effectiveAnalyzing ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
                   }`}
                 >
                   <Mic className="w-4 h-4" />
-                  <span>{recordedBlob ? "Thu âm lại" : "Bắt đầu thu âm"}</span>
+                  <span>{micBlob ? "Thu âm lại" : "Bắt đầu thu âm"}</span>
                 </button>
               ) : (
                 <button
@@ -200,7 +310,7 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
               )}
             </div>
 
-            {recordedBlob && !isRecording && (
+            {micBlob && !isRecording && (
               <span className="text-xs text-emerald-700 font-semibold bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
                 ✓ Đã thu âm xong ({recordDuration}s)
               </span>
@@ -221,7 +331,9 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
             <p className="text-sm font-semibold text-slate-700">
               Kéo thả hoặc nhấp để chọn file âm thanh
             </p>
-            <p className="text-xs text-slate-500 mt-1">Hỗ trợ WAV, MP3, M4A, OGG, WEBM, FLAC</p>
+            <p className="text-xs text-slate-500 mt-1">
+              Hỗ trợ WAV, MP3, M4A, OGG, WEBM, FLAC
+            </p>
             <input
               type="file"
               disabled={effectiveAnalyzing}
@@ -264,7 +376,7 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
               <span className="text-xs font-bold text-slate-700 block">
                 Nghe lại đoạn âm thanh
               </span>
-              <span className="text-[11px] text-slate-500">{currentAudioName}</span>
+              <span className="text-[11px] text-slate-500">{displayAudioName}</span>
             </div>
             <audio
               ref={audioPlayerRef}
