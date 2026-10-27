@@ -8,10 +8,12 @@ from typing import Tuple, Dict, Any, Optional
 
 # Tự động nạp độc lập standalone FFmpeg từ imageio-ffmpeg nếu máy người dùng chưa cài FFmpeg toàn cục
 try:
-    import imageio_ffmpeg
-    ffmpeg_bin = imageio_ffmpeg.get_ffmpeg_exe()
-    AudioSegment.converter = ffmpeg_bin
-    AudioSegment.ffmpeg = ffmpeg_bin
+    import importlib
+    _imageio_ffmpeg = importlib.import_module("imageio_ffmpeg")
+    _ffmpeg_bin = getattr(_imageio_ffmpeg, "get_ffmpeg_exe", lambda: None)()
+    if _ffmpeg_bin:
+        AudioSegment.converter = _ffmpeg_bin
+        AudioSegment.ffmpeg = _ffmpeg_bin
 except Exception:
     pass
 
