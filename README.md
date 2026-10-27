@@ -1,13 +1,3 @@
-# ViSEC Speech Emotion Recognition (SER) Enterprise v2.0
-
-> **Đồ án Đột phá / Khóa luận Tốt nghiệp — Đại học Sư phạm Kỹ thuật TP.HCM (HCMUTE)**  
-> **Nhóm thực hiện:** Nhóm 2  
-> **Thành viên:** Lê Hoàng Triều (MSSV: 24110356) cùng các thành viên Nhóm 2  
-> **Tech Stack:** Next.js 16 (React 19) + FastAPI (ASGI) + ONNX Runtime (Wav2Vec2 + ArcFace)  
-> **Dữ liệu:** ViSEC (Vietnamese Social Media Emotion Corpus — 4 nhãn: `angry`, `happy`, `neutral`, `sad`)
-
----
-
 ## 1. Sơ Đồ Kiến Trúc Hệ Thống (Architecture)
 
 ```text
