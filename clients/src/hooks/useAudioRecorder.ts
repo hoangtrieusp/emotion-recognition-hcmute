@@ -28,17 +28,21 @@ function getSupportedAudioMimeType(): string {
     "audio/webm",
     "audio/ogg;codecs=opus",
     "audio/ogg",
-    "audio/wav",
     "audio/mp4",
+    "audio/wav",
   ];
 
   for (const mime of mimeCandidates) {
-    if (MediaRecorder.isTypeSupported(mime)) {
-      return mime;
+    try {
+      if (MediaRecorder.isTypeSupported(mime)) {
+        return mime;
+      }
+    } catch {
+      // Ignore unsupported check errors
     }
   }
 
-  return "audio/webm";
+  return "";
 }
 
 export function useAudioRecorder(): UseAudioRecorderReturn {
@@ -51,46 +55,61 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
   const [error, setError] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const previewUrlRef = useRef<string | null>(null);
 
-  // Clean up object URL when it changes or on unmount
+  // Sync ref with state for preview URL cleanup
   useEffect(() => {
-    return () => {
-      if (audioPreviewUrl) {
-        URL.revokeObjectURL(audioPreviewUrl);
-      }
-    };
+    previewUrlRef.current = audioPreviewUrl;
   }, [audioPreviewUrl]);
 
-  // Clean up recording tracks & timers on unmount
+  // Cleanup on unmount ONLY (empty dependency array to prevent cancelling active recordings)
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop();
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
       }
-      if (audioStream) {
-        audioStream.getTracks().forEach((track) => track.stop());
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {}
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
       }
     };
-  }, [audioStream]);
+  }, []);
 
   const resetRecording = useCallback(() => {
-    if (audioPreviewUrl) {
-      URL.revokeObjectURL(audioPreviewUrl);
-      setAudioPreviewUrl(null);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
     }
+    setAudioPreviewUrl(null);
     setRecordedBlob(null);
     setRecordDuration(0);
     setError(null);
     chunksRef.current = [];
-  }, [audioPreviewUrl]);
+  }, []);
 
   const startRecording = useCallback(async () => {
     try {
       setError(null);
       resetRecording();
+
+      // Dừng bất kỳ stream cũ nào còn sót
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -100,14 +119,14 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
         },
       });
 
+      streamRef.current = stream;
       setAudioStream(stream);
-      setIsRecording(true);
-      setRecordDuration(0);
 
       const supportedMime = getSupportedAudioMimeType();
-      setRecordingMimeType(supportedMime);
+      setRecordingMimeType(supportedMime || "audio/webm");
 
-      const recorder = new MediaRecorder(stream, { mimeType: supportedMime });
+      const options: MediaRecorderOptions = supportedMime ? { mimeType: supportedMime } : {};
+      const recorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
 
@@ -118,43 +137,67 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
       };
 
       recorder.onstop = () => {
-        // Chốt chặn sinh tử 2: Đảm bảo Blob xuất xưởng có đúng MIME Type ('audio/webm' hoặc 'audio/wav')
-        const finalType = supportedMime.includes("wav") ? "audio/wav" : "audio/webm";
-        const finalBlob = new Blob(chunksRef.current, { type: finalType });
+        const mime = recorder.mimeType || supportedMime || "audio/webm";
+        const cleanType = mime.includes("wav") ? "audio/wav" : mime.includes("mp4") ? "audio/mp4" : "audio/webm";
+        const finalBlob = new Blob(chunksRef.current, { type: cleanType });
+        
         setRecordedBlob(finalBlob);
 
         const url = URL.createObjectURL(finalBlob);
         setAudioPreviewUrl(url);
+
+        // Dừng các track audio sau khi đã xuất xưởng Blob an toàn
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
+        }
+        setAudioStream(null);
       };
 
-      recorder.start(100); // 100ms chunk slices
+      recorder.start(100); // 100ms time slice
+      setIsRecording(true);
+      startTimeRef.current = Date.now();
+      setRecordDuration(0);
 
+      if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
-        setRecordDuration((prev) => prev + 1);
-      }, 1000);
+        const elapsedSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        setRecordDuration(elapsedSec);
+      }, 500);
     } catch (err: unknown) {
+      console.error("Microphone error:", err);
       const msg = err instanceof Error ? err.message : String(err);
       setError("Không thể truy cập Microphone: " + msg);
       setIsRecording(false);
-    }
-  }, [resetRecording]);
-
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
+    }
+  }, [resetRecording]);
 
-      if (audioStream) {
-        audioStream.getTracks().forEach((track) => track.stop());
-        setAudioStream(null);
+  const stopRecording = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (err) {
+        console.error("Error stopping MediaRecorder:", err);
       }
     }
-  }, [isRecording, audioStream]);
+
+    setIsRecording(false);
+
+    // Tính toán thời lượng chính xác
+    if (startTimeRef.current > 0) {
+      const totalSec = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
+      setRecordDuration(totalSec);
+    }
+  }, []);
 
   return {
     isRecording,
