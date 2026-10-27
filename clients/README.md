@@ -22,13 +22,11 @@ clients/src/
 │   ├── layout.tsx                # Khung giao diện chuẩn, tối ưu font & metadata
 │   ├── page.tsx                  # Controller chính, quản lý state isAnalyzing & gọi API
 │   └── globals.css               # Styling tokens, thanh cuộn tùy biến
-├── components/
-│   ├── Header.tsx                # Thanh tiêu đề và trạng thái kết nối
-│   ├── WaveformVisualizer.tsx    # Dao động ký HTML5 Canvas khi thu âm Micro
-│   ├── AudioInput.tsx            # Thu âm Micro & Tải lên file âm thanh
-│   └── EmotionDashboard.tsx      # Thẻ Cảm xúc chính, 4 Thanh Xác suất & Thời gian xử lý
-└── hooks/
-    └── useAudioRecorder.ts       # Hook Web Audio API (Chuẩn hóa Blob 'audio/webm'/'audio/wav')
+└── components/
+    ├── Header.tsx                # Thanh tiêu đề và trạng thái kết nối
+    ├── WaveformVisualizer.tsx    # Dao động ký HTML5 Canvas khi thu âm Micro
+    ├── AudioInput.tsx            # Thu âm Micro độc lập & Tải lên file âm thanh
+    └── EmotionDashboard.tsx      # Thẻ Cảm xúc chính, 4 Thanh Xác suất & Thời gian xử lý
 ```
 
 ---
@@ -39,7 +37,8 @@ clients/src/
    - Tự động vô hiệu hóa toàn bộ tương tác (nút Thu âm, Tải file) khi đang phân tích để tránh xung đột dữ liệu hoặc giao diện nhảy loạn xạ khi click dồn dập.
    - Tích hợp `AbortController` để hủy bỏ request cũ nếu có yêu cầu mới.
 
-2. **Hook Thu âm Chuẩn Hóa (`useAudioRecorder`):**
+2. **Thu âm Microphone Độc Lập & Chuẩn Hóa:**
+   - Quản lý `MediaRecorder` trực tiếp, tách biệt hoàn toàn giữa bản thu âm và file tải lên.
    - Tự động phát hiện codec trình duyệt hỗ trợ (`audio/webm;codecs=opus`, `audio/webm`, `audio/wav`).
    - Đóng gói file `Blob` với MIME type chuẩn xác trước khi nạp vào `FormData`.
    - Tự động giải phóng `MediaStreamTrack` ngay khi dừng thu âm để trình duyệt tắt icon Micro.
