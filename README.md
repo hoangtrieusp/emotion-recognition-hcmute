@@ -4,7 +4,7 @@
 ┌────────────────────────────────────────────────────────┐
 │ [Frontend] Next.js 16 (React 19 + Tailwind CSS)        │
 │ - Thu âm qua Web Audio API (MIME 'audio/webm'/'wav')   │
-│ - Live Canvas Oscilloscope + 4 nút test mẫu nhanh      │
+│ - Live Canvas Oscilloscope thu âm qua Web Audio API    │
 │ - Hiển thị Dominant Emotion, Probability Bars & Latency│
 └──────────────────────────┬─────────────────────────────┘
                            │ HTTP POST Multipart (/api/v1/predict/emotion)
@@ -75,7 +75,7 @@ emotion-recognition-hcmute/
         │   └── globals.css           # Cấu hình Light Theme
         ├── components/
         │   ├── Header.tsx            # Badge trạng thái GPU/CPU thời gian thực
-        │   ├── AudioInput.tsx        # Thu âm Micro, Dropzone & 4 nút test mẫu nhanh
+        │   ├── AudioInput.tsx        # Thu âm Micro & File Audio Dropzone
         │   ├── EmotionDashboard.tsx  # Thẻ cảm xúc chính, xác suất 4 nhãn & latency telemetry
         │   └── WaveformVisualizer.tsx# Live Audio Canvas Oscilloscope
         └── hooks/
