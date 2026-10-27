@@ -115,6 +115,33 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
     );
   }
 
+  // Error State (e.g. Backend offline, network failure, 500 error)
+  if (result.status === "error") {
+    return (
+      <div className="bg-white rounded-2xl border border-rose-200 p-6 shadow-sm">
+        <div className="flex items-start space-x-3 bg-rose-50 border border-rose-200 p-4 rounded-xl text-rose-900 mb-5">
+          <AlertTriangle className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-bold text-sm">Lỗi Kết Nối Máy Chủ API</h4>
+            <p className="text-xs mt-1 text-rose-800 leading-relaxed">{result.error}</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl text-xs space-y-2">
+          <p className="font-semibold text-slate-800">
+            👉 Hướng dẫn khắc phục (dành cho lập trình viên / người chạy):
+          </p>
+          <ol className="list-decimal list-inside space-y-1 text-slate-600 font-mono text-[11px]">
+            <li>Mở một Terminal mới tại thư mục gốc của project.</li>
+            <li>Kích hoạt môi trường Python (nếu có venv).</li>
+            <li>Chạy lệnh: <span className="text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">python -m uvicorn servers.app.main:app --port 8000</span></li>
+            <li>Đảm bảo file trọng số <span className="text-amber-700 font-bold">servers/weights/ser_model.onnx</span> đã tồn tại.</li>
+          </ol>
+        </div>
+      </div>
+    );
+  }
+
   // Warning (File too short or low RMS)
   if (result.status === "warning") {
     return (
