@@ -6,6 +6,15 @@ import soundfile as sf
 from pydub import AudioSegment
 from typing import Tuple, Dict, Any, Optional
 
+# Tự động nạp độc lập standalone FFmpeg từ imageio-ffmpeg nếu máy người dùng chưa cài FFmpeg toàn cục
+try:
+    import imageio_ffmpeg
+    ffmpeg_bin = imageio_ffmpeg.get_ffmpeg_exe()
+    AudioSegment.converter = ffmpeg_bin
+    AudioSegment.ffmpeg = ffmpeg_bin
+except Exception:
+    pass
+
 # UTF-8 standard streams on Windows
 if sys.platform == "win32":
     if hasattr(sys.stdout, "reconfigure"):
@@ -55,7 +64,10 @@ def decode_audio_bytes(audio_bytes: bytes) -> Tuple[np.ndarray, int]:
                 del segment
                 del raw_samples
         except Exception as e:
-            raise ValueError(f"Không thể giải mã dữ liệu âm thanh: {str(e)}")
+            err_msg = str(e)
+            if "WinError 2" in err_msg or "ffmpeg" in err_msg.lower():
+                raise ValueError("Máy chủ chưa cài đặt công cụ FFmpeg để giải mã âm thanh ghi âm từ trình duyệt. Vui lòng mở terminal chạy lệnh: pip install imageio-ffmpeg")
+            raise ValueError(f"Không thể giải mã dữ liệu âm thanh: {err_msg}")
 
     if data is None or len(data) == 0:
         raise ValueError("Tín hiệu âm thanh sau khi giải mã rỗng.")
