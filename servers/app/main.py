@@ -7,7 +7,6 @@ from typing import Optional
 import psutil
 import numpy as np
 
-# UTF-8 standard streams on Windows
 if sys.platform == "win32":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -32,7 +31,6 @@ logger = logging.getLogger("ser_api")
 engine: Optional[ONNXInferenceEngine] = None
 
 def collect_system_metrics() -> SystemMetrics:
-    """Thu thập thông số tài nguyên hệ thống (CPU, RAM, GPU VRAM)."""
     cpu_pct = float(psutil.cpu_percent(interval=None))
     mem = psutil.virtual_memory()
     ram_used_mb = round(mem.used / (1024 * 1024), 1)
@@ -98,7 +96,6 @@ app.add_middleware(
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Kiểm tra trạng thái sức khỏe dịch vụ và thông số phần cứng."""
     metrics = collect_system_metrics()
     if engine is None:
         return HealthResponse(
@@ -119,16 +116,12 @@ async def health_check():
 
 @app.post("/api/v1/predict/emotion", response_model=EmotionPredictionResponse)
 async def predict_emotion(file: UploadFile = File(...)):
-    """
-    Nhận diện cảm xúc từ file audio tải lên hoặc từ micro browser (Zero-Disk I/O).
-    """
     if engine is None:
         raise HTTPException(status_code=503, detail="Mô hình AI chưa sẵn sàng hoặc đang khởi động.")
 
     total_start = time.perf_counter()
     
     try:
-        # 1. Đọc audio bytes vào bộ nhớ RAM
         try:
             audio_bytes = await file.read()
         except Exception as e:
@@ -137,7 +130,6 @@ async def predict_emotion(file: UploadFile = File(...)):
         if not audio_bytes or len(audio_bytes) == 0:
             raise HTTPException(status_code=400, detail="File âm thanh rỗng.")
 
-        # 2. Tiền xử lý tín hiệu DSP
         dsp_start = time.perf_counter()
         try:
             dsp_result = preprocess_audio_pipeline(audio_bytes)
@@ -167,13 +159,11 @@ async def predict_emotion(file: UploadFile = File(...)):
                 }
             )
 
-        # 3. Suy luận AI qua ONNX Runtime (Dynamic Batch Inference)
         infer_start = time.perf_counter()
         chunks = dsp_result["chunks"]
         chunk_probs = engine.predict_chunks(chunks)
         infer_duration_ms = (time.perf_counter() - infer_start) * 1000.0
 
-        # 4. Tập hợp xác suất Salience Pooling
         final_probs = aggregate_salience_probabilities(chunk_probs)
         
         probabilities = {

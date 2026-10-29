@@ -6,7 +6,6 @@ import soundfile as sf
 from pydub import AudioSegment
 from typing import Tuple, Dict, Any, Optional
 
-# Tự động nạp độc lập standalone FFmpeg từ imageio-ffmpeg nếu máy người dùng chưa cài FFmpeg toàn cục
 try:
     import importlib
     _imageio_ffmpeg = importlib.import_module("imageio_ffmpeg")
@@ -17,7 +16,6 @@ try:
 except Exception:
     pass
 
-# UTF-8 standard streams on Windows
 if sys.platform == "win32":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -27,25 +25,19 @@ if sys.platform == "win32":
 TARGET_SR: int = 16000
 MAX_CHUNK_DURATION: float = 3.5
 HOP_DURATION: float = 2.0
-WINDOW_SAMPLES: int = int(MAX_CHUNK_DURATION * TARGET_SR)  # 56,000 samples (3.5s)
-HOP_SAMPLES: int = int(HOP_DURATION * TARGET_SR)          # 32,000 samples (2.0s)
+WINDOW_SAMPLES: int = int(MAX_CHUNK_DURATION * TARGET_SR)
+HOP_SAMPLES: int = int(HOP_DURATION * TARGET_SR)
 
 def decode_audio_bytes(audio_bytes: bytes) -> Tuple[np.ndarray, int]:
-    """
-    Giải mã audio bytes từ mọi định dạng (WAV, MP3, WebM/Opus, OGG, M4A, FLAC)
-    về mảng NumPy Float32 16kHz Mono [-1.0, 1.0] hoàn toàn trong RAM (Zero-Disk I/O).
-    """
     data: Optional[np.ndarray] = None
     sr: int = TARGET_SR
 
     try:
-        # 1. Đọc trực tiếp bằng SoundFile (tối ưu cho WAV, FLAC, OGG chuẩn)
         with io.BytesIO(audio_bytes) as bio:
             data, sr = sf.read(bio, dtype="float32")
             if data.ndim > 1:
-                data = np.mean(data, axis=1)  # Chuyển stereo -> mono
+                data = np.mean(data, axis=1)
     except Exception:
-        # 2. Fallback qua PyDub/FFmpeg in-memory (hỗ trợ WebM/Opus từ trình duyệt, MP3, M4A)
         try:
             with io.BytesIO(audio_bytes) as bio:
                 segment = AudioSegment.from_file(bio)
@@ -55,7 +47,6 @@ def decode_audio_bytes(audio_bytes: bytes) -> Tuple[np.ndarray, int]:
                 if len(raw_samples) == 0:
                     raise ValueError("File âm thanh không chứa mẫu tín hiệu hợp lệ.")
 
-                # Chuẩn hóa về [-1.0, 1.0] theo bit depth
                 if segment.sample_width == 2:
                     data = raw_samples.astype(np.float32) / 32768.0
                 elif segment.sample_width == 4:
@@ -74,7 +65,6 @@ def decode_audio_bytes(audio_bytes: bytes) -> Tuple[np.ndarray, int]:
     if data is None or len(data) == 0:
         raise ValueError("Tín hiệu âm thanh sau khi giải mã rỗng.")
 
-    # 3. Resample về 16kHz nếu cần
     if sr != TARGET_SR:
         duration = len(data) / float(sr)
         num_target_samples = int(duration * TARGET_SR)
@@ -88,19 +78,14 @@ def decode_audio_bytes(audio_bytes: bytes) -> Tuple[np.ndarray, int]:
     return data, sr
 
 def compute_rms(signal: np.ndarray) -> float:
-    """Tính năng lượng hiệu dụng RMS Energy trung bình của tín hiệu."""
     if len(signal) == 0:
         return 0.0
     return float(np.sqrt(np.mean(signal ** 2) + 1e-9))
 
 def trim_silence(signal: np.ndarray, top_db: float = 30.0, frame_length: int = 1024, hop_length: int = 256) -> np.ndarray:
-    """
-    Cắt khoảng lặng tĩnh 2 đầu (VAD) dựa trên ngưỡng năng lượng dB (thuần NumPy).
-    """
     if len(signal) <= frame_length:
         return signal
 
-    # Tính RMS trượt với Stride Tricks
     num_frames = 1 + (len(signal) - frame_length) // hop_length
     frames = np.lib.stride_tricks.as_strided(
         signal,
@@ -124,10 +109,6 @@ def trim_silence(signal: np.ndarray, top_db: float = 30.0, frame_length: int = 1
     return signal[start_sample:end_sample]
 
 def adaptive_overlapping_chunking(signal: np.ndarray, sr: int = TARGET_SR) -> np.ndarray:
-    """
-    Phân tách audio thành K chunks 3.5s gối đầu (hop 2.0s), bao phủ 100% thời lượng.
-    Output: Ma trận NumPy shape (K, 56000) hoặc (1, len) nếu ngắn hơn 3.5s.
-    """
     total_len = len(signal)
     if total_len <= WINDOW_SAMPLES:
         return signal[np.newaxis, :]
@@ -138,18 +119,12 @@ def adaptive_overlapping_chunking(signal: np.ndarray, sr: int = TARGET_SR) -> np
         chunks.append(signal[start : start + WINDOW_SAMPLES])
         start += HOP_SAMPLES
 
-    # Bổ sung chunk vét đuôi lùi từ cuối file
     if start < total_len:
         chunks.append(signal[-WINDOW_SAMPLES:])
 
     return np.stack(chunks, axis=0).astype(np.float32)
 
 def aggregate_salience_probabilities(chunk_probs: np.ndarray, temperature: float = 0.5) -> np.ndarray:
-    """
-    Confidence-Weighted Salience Pooling:
-    Tập hợp xác suất K chunks theo độ nổi bật cảm xúc (Salience = max - min),
-    bảo toàn các biểu cảm bộc phát ngắn hạn (quát giận, cười rộ).
-    """
     if len(chunk_probs) == 1:
         return chunk_probs[0]
 
@@ -161,20 +136,14 @@ def aggregate_salience_probabilities(chunk_probs: np.ndarray, temperature: float
     return final_probs.astype(np.float32)
 
 def preprocess_audio_pipeline(audio_bytes: bytes) -> Dict[str, Any]:
-    """
-    Pipeline tiền xử lý DSP hoàn chỉnh:
-    Decode -> Resample -> VAD Silence Trim -> RMS Check -> Normalize -> Adaptive Chunking
-    """
     raw_signal, sr = decode_audio_bytes(audio_bytes)
     
-    # Cắt khoảng lặng 2 đầu (top_db=30.0)
     trimmed_signal = trim_silence(raw_signal, top_db=30.0)
     signal = trimmed_signal if len(trimmed_signal) > 0 else raw_signal
     
     duration = float(len(signal) / sr)
     rms_energy = compute_rms(signal)
     
-    # Kiểm tra chất lượng tín hiệu (Quality Gating)
     if duration < 0.5:
         return {
             "is_valid": False,
@@ -194,10 +163,7 @@ def preprocess_audio_pipeline(audio_bytes: bytes) -> Dict[str, Any]:
             "num_chunks": 0
         }
 
-    # Chuẩn hóa Z-Score: Zero-mean, Unit-variance
     norm_signal = (signal - np.mean(signal)) / np.sqrt(np.var(signal) + 1e-7)
-    
-    # Phân đoạn cửa sổ trượt gối đầu
     chunks = adaptive_overlapping_chunking(norm_signal, sr=sr)
     
     return {

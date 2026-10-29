@@ -79,7 +79,6 @@ class SERModel(nn.Module):
         sap_out = torch.cat([weighted_mean, weighted_std], dim=-1)
         x = self.sap_norm(sap_out)
         x = self.gelu(self.fc1(x))
-        # Trong inference mode: x chính là embedding (dropout là identity)
         return x
 
 class EndToEndSER(nn.Module):
@@ -115,7 +114,6 @@ def export():
     e2e_model.eval()
     print("[SUCCESS] Đã nạp thành công trọng số vào EndToEndSERModel.")
 
-    # Dummy input: 1 audio sample dài 3 giây ở 16kHz
     dummy_input = torch.randn(1, 16000 * 3, dtype=torch.float32, device=device)
 
     print(f"[2/4] Bắt đầu xuất ONNX sang '{OUTPUT_ONNX_PATH}'...")
@@ -142,7 +140,6 @@ def export():
 
     ort_session = ort.InferenceSession(OUTPUT_ONNX_PATH, providers=["CPUExecutionProvider"])
     
-    # Test trên 2 audio có độ dài khác nhau để kiểm tra tính linh hoạt của Dynamic Axes
     test_lengths = [16000 * 2, 16000 * 3.5]
     for idx, length in enumerate(test_lengths):
         test_input = torch.randn(1, int(length), dtype=torch.float32, device=device)

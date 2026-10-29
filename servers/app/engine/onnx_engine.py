@@ -4,7 +4,6 @@ import logging
 from typing import Dict, Any, Optional, List
 import numpy as np
 
-# UTF-8 standard streams on Windows
 if sys.platform == "win32":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -16,10 +15,6 @@ logger = logging.getLogger("ser_engine")
 EMOTION_MAPPING: Dict[int, str] = {0: "angry", 1: "happy", 2: "neutral", 3: "sad"}
 
 def resolve_model_path(filename: str, preferred_dir: Optional[str] = None) -> str:
-    """
-    Tự động tìm kiếm đường dẫn tuyệt đối của file model/checkpoint
-    dù server được khởi động từ thư mục gốc hay thư mục con.
-    """
     candidate_paths: List[str] = []
     
     if preferred_dir:
@@ -49,11 +44,6 @@ def resolve_model_path(filename: str, preferred_dir: Optional[str] = None) -> st
 
 
 class PyTorchFallbackEngine:
-    """
-    Disaster Recovery Engine: Sử dụng PyTorch checkpoint trực tiếp (model_fold_5.pt)
-    khi mô hình ONNX bị lỗi, hỏng file hoặc thiếu môi trường ONNX Runtime.
-    Tự động tận dụng NVIDIA CUDA GPU nếu khả dụng, ngược lại dùng CPU.
-    """
     _instance: Optional["PyTorchFallbackEngine"] = None
 
     def __init__(self, checkpoint_path: Optional[str] = None):
@@ -156,11 +146,6 @@ class PyTorchFallbackEngine:
 
 
 class ONNXInferenceEngine:
-    """
-    Singleton AI Engine:
-    - Resilient Dual-Engine: CUDAExecutionProvider -> CPUExecutionProvider -> PyTorch Disaster Recovery
-    - Khởi tạo duy nhất 1 lần trong Lifespan event
-    """
     _instance: Optional[Any] = None
 
     def __init__(self, model_path: Optional[str] = None):
@@ -180,7 +165,6 @@ class ONNXInferenceEngine:
         session_created = False
         last_error = None
 
-        # Tier 1: CUDAExecutionProvider nếu có phần cứng NVIDIA
         if "CUDAExecutionProvider" in available_providers:
             try:
                 tier1_providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
@@ -195,7 +179,6 @@ class ONNXInferenceEngine:
                 logger.warning(f"CUDA provider khởi tạo không thành công ({e}), chuyển sang CPU provider.")
                 last_error = e
 
-        # Tier 2: Fallback sang CPUExecutionProvider
         if not session_created:
             try:
                 tier2_providers = ["CPUExecutionProvider"]
@@ -211,7 +194,6 @@ class ONNXInferenceEngine:
                 raise last_error
 
     def _warmup(self) -> None:
-        """Warmup đồ thị ONNX Runtime để triệt tiêu trễ ở request đầu tiên."""
         try:
             dummy = np.zeros((1, 16000 * 3), dtype=np.float32)
             _ = self.session.run(None, {"input_values": dummy})
@@ -220,7 +202,6 @@ class ONNXInferenceEngine:
 
     @classmethod
     def get_instance(cls, model_path: Optional[str] = None) -> Any:
-        """Singleton Accessor với cơ chế tự động Fallback sang PyTorch."""
         if cls._instance is not None:
             return cls._instance
 
