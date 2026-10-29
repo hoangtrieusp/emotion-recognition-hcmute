@@ -144,9 +144,10 @@ def apply_adaptive_spectral_cleanup(signal_data: np.ndarray, sr: int = TARGET_SR
     p10 = np.percentile(frame_rms, 10)
     snr_db = float(20.0 * np.log10(p90 / (p10 + 1e-6) + 1e-4))
 
-    wiener_strength = float(np.clip(1.2 - 0.03 * (snr_db - 10.0), 0.2, 1.2))
+    wiener_strength = float(np.clip(1.3 - 0.03 * (snr_db - 10.0), 0.3, 1.5))
     snr_local = mag / (noise_floor + 1e-8)
-    wiener_gain = np.clip(1.0 - wiener_strength / (snr_local + 1e-4), 0.35, 1.0)
+    wiener_gain = np.clip(1.0 - wiener_strength / (snr_local + 1e-4), 0.12, 1.0)
+    wiener_gain = ndimage.uniform_filter1d(wiener_gain, size=3, axis=1)
 
     final_gain = (harm_blend * mask_harm + (1.0 - harm_blend)) * wiener_gain
 
@@ -196,6 +197,15 @@ def adaptive_overlapping_chunking(signal_data: np.ndarray, frame_speech: np.ndar
         norm = (signal_data - np.mean(signal_data)) / np.sqrt(np.var(signal_data) + 1e-7)
         return norm[np.newaxis, :].astype(np.float32), np.array([1.0], dtype=np.float32)
 
+    frame_len = 512
+    num_f = total_len // frame_len
+    if num_f > 0:
+        f_rms_vals = np.array([np.sqrt(np.mean(signal_data[i * frame_len : (i + 1) * frame_len] ** 2)) for i in range(num_f)])
+        voiced_f_rms = f_rms_vals[f_rms_vals > 0.003]
+        primary_rms = float(np.percentile(voiced_f_rms, 80)) if len(voiced_f_rms) > 0 else 0.03
+    else:
+        primary_rms = 0.03
+
     start = 0
     while start + WINDOW_SAMPLES <= total_len:
         c = signal_data[start : start + WINDOW_SAMPLES]
@@ -206,7 +216,8 @@ def adaptive_overlapping_chunking(signal_data: np.ndarray, frame_speech: np.ndar
         f_end = (start + WINDOW_SAMPLES) // hop
         speech_val = float(np.mean(frame_speech[f_start:f_end])) if f_end > f_start else 0.5
         c_rms = np.sqrt(np.mean(c ** 2) + 1e-9)
-        weights.append(speech_val * min(1.0, c_rms / 0.015))
+        rel_energy = float(np.clip((c_rms - 0.20 * primary_rms) / (0.40 * primary_rms + 1e-6), 0.02, 1.0))
+        weights.append(speech_val * rel_energy)
         start += HOP_SAMPLES
 
     if start < total_len:
@@ -217,7 +228,8 @@ def adaptive_overlapping_chunking(signal_data: np.ndarray, frame_speech: np.ndar
         f_end = total_len // hop
         speech_val = float(np.mean(frame_speech[f_start:f_end]))
         c_rms = np.sqrt(np.mean(c ** 2) + 1e-9)
-        weights.append(speech_val * min(1.0, c_rms / 0.015))
+        rel_energy = float(np.clip((c_rms - 0.20 * primary_rms) / (0.40 * primary_rms + 1e-6), 0.02, 1.0))
+        weights.append(speech_val * rel_energy)
 
     return np.stack(chunks).astype(np.float32), np.array(weights, dtype=np.float32)
 

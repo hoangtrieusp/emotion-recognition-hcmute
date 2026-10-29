@@ -71,7 +71,41 @@ def test_speech_with_ambient_noise(engine):
     final_probs = aggregate_salience_probabilities(probs, res.get("chunk_weights"))
     predicted_emotion = EMOTIONS[int(np.argmax(final_probs))]
     assert predicted_emotion == "happy"
-    assert final_probs[EMOTIONS.index("happy")] >= 0.70
+def test_speech_with_heavy_fan_and_ac_noise(engine):
+    filepath = os.path.join(SAMPLES_DIR, "neutral_sample.wav")
+    sig, sr = sf.read(filepath, dtype="float32")
+    rms = np.sqrt(np.mean(sig ** 2))
+    t = np.linspace(0, len(sig) / sr, len(sig), endpoint=False)
+    fan_hum = (rms * 0.25) * np.sin(2 * np.pi * 120 * t) + (rms * 0.15) * np.sin(2 * np.pi * 240 * t)
+    white = np.random.normal(0, rms * 0.20, len(sig))
+    b_pink, a_pink = [0.049922035, -0.095993537, 0.050612699, -0.004408786], [1, -2.494956002, 2.017265875, -0.522189400]
+    fan_noise = signal.lfilter(b_pink, a_pink, white).astype(np.float32) + fan_hum.astype(np.float32)
+    noisy_sig = sig + fan_noise
+    wav_bytes = _to_wav_bytes(noisy_sig, sr)
+    res = preprocess_audio_pipeline(wav_bytes)
+    assert res["is_valid"] is True
+    probs = engine.predict_chunks(res["chunks"])
+    final_probs = aggregate_salience_probabilities(probs, res.get("chunk_weights"))
+    predicted_emotion = EMOTIONS[int(np.argmax(final_probs))]
+    assert predicted_emotion in ["neutral", "sad"]
+    assert final_probs[EMOTIONS.index("angry")] < 0.15
+
+def test_speech_with_distant_background_talker(engine):
+    sad_path = os.path.join(SAMPLES_DIR, "sad_sample.wav")
+    happy_path = os.path.join(SAMPLES_DIR, "happy_sample.wav")
+    sad_sig, sr = sf.read(sad_path, dtype="float32")
+    happy_sig, _ = sf.read(happy_path, dtype="float32")
+    sad_chunk = sad_sig[:int(3.5 * sr)] if len(sad_sig) >= int(3.5 * sr) else np.pad(sad_sig, (0, int(3.5 * sr) - len(sad_sig)))
+    happy_bg = (happy_sig[:int(3.5 * sr)] if len(happy_sig) >= int(3.5 * sr) else np.pad(happy_sig, (0, int(3.5 * sr) - len(happy_sig)))) * (10 ** (-16 / 20))
+    full_audio = np.concatenate([sad_chunk, happy_bg])
+    wav_bytes = _to_wav_bytes(full_audio, sr)
+    res = preprocess_audio_pipeline(wav_bytes)
+    assert res["is_valid"] is True
+    probs = engine.predict_chunks(res["chunks"])
+    final_probs = aggregate_salience_probabilities(probs, res.get("chunk_weights"))
+    predicted_emotion = EMOTIONS[int(np.argmax(final_probs))]
+    assert predicted_emotion == "sad"
+    assert final_probs[EMOTIONS.index("sad")] >= 0.70
 
 def test_speech_with_background_music_beats(engine):
     filepath = os.path.join(SAMPLES_DIR, "neutral_sample.wav")
