@@ -17,9 +17,14 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from servers.app.schemas import EmotionPredictionResponse, HealthResponse, Telemetry, SystemMetrics
-from servers.app.core.audio_processor import preprocess_audio_pipeline, aggregate_salience_probabilities
-from servers.app.engine.onnx_engine import ONNXInferenceEngine, EMOTION_MAPPING
+try:
+    from servers.app.schemas import EmotionPredictionResponse, HealthResponse, Telemetry, SystemMetrics
+    from servers.app.core.audio_processor import preprocess_audio_pipeline, aggregate_salience_probabilities
+    from servers.app.engine.onnx_engine import ONNXInferenceEngine, EMOTION_MAPPING
+except ImportError:
+    from app.schemas import EmotionPredictionResponse, HealthResponse, Telemetry, SystemMetrics
+    from app.core.audio_processor import preprocess_audio_pipeline, aggregate_salience_probabilities
+    from app.engine.onnx_engine import ONNXInferenceEngine, EMOTION_MAPPING
 
 logging.basicConfig(
     level=logging.INFO,

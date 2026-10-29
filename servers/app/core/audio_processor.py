@@ -90,9 +90,29 @@ def apply_bandpass_filter(signal_data: np.ndarray, sr: int = TARGET_SR, lowcut: 
     sos = signal.butter(5, [lowcut, highcut], btype="bandpass", fs=sr, output="sos")
     return signal.sosfilt(sos, signal_data).astype(np.float32)
 
-def apply_adaptive_spectral_cleanup(signal_data: np.ndarray, sr: int = TARGET_SR) -> Tuple[np.ndarray, np.ndarray, float, float]:
+def compute_voicing_ratio(signal_data: np.ndarray, sr: int = TARGET_SR) -> float:
+    frame_len = int(0.030 * sr)
+    hop_len = int(0.010 * sr)
+    num_f = (len(signal_data) - frame_len) // hop_len
+    if num_f <= 0:
+        return 0.0
+    min_lag = int(sr / 450)
+    max_lag = int(sr / 80)
+    voiced_count = 0
+    stride = 2
+    for i in range(0, num_f, stride):
+        fr = signal_data[i * hop_len : i * hop_len + frame_len]
+        if np.sqrt(np.mean(fr ** 2) + 1e-9) > 0.001:
+            ac = signal.correlate(fr, fr, mode="full")[frame_len - 1 :]
+            r0 = ac[0] + 1e-9
+            pitch_ac = ac[min_lag:max_lag]
+            if len(pitch_ac) > 0 and (np.max(pitch_ac) / r0) >= 0.35:
+                voiced_count += 1
+    return float((voiced_count * stride) / num_f)
+
+def apply_adaptive_spectral_cleanup(signal_data: np.ndarray, sr: int = TARGET_SR) -> Tuple[np.ndarray, np.ndarray, float, float, float, float]:
     if len(signal_data) < 512:
-        return signal_data.astype(np.float32), np.ones(1, dtype=np.float32), 0.0, 30.0
+        return signal_data.astype(np.float32), np.ones(1, dtype=np.float32), 0.0, 30.0, 0.5, 0.5
 
     filtered = apply_bandpass_filter(signal_data, sr=sr)
 
@@ -134,12 +154,17 @@ def apply_adaptive_spectral_cleanup(signal_data: np.ndarray, sr: int = TARGET_SR
     _, cleaned = signal.istft(cleaned_mag * np.exp(1j * phase), fs=sr, nperseg=n_fft, noverlap=n_fft - hop)
     cleaned = cleaned[:len(signal_data)].astype(np.float32)
 
+    total_energy_sum = float(np.sum(cleaned_mag ** 2) + 1e-8)
+    f_fund = (f >= 85) & (f <= 450)
+    fund_ratio = float(np.sum(cleaned_mag[f_fund, :] ** 2)) / total_energy_sum
+
     formant_bins = (f >= 300) & (f <= 3400)
     formant_energy = np.sum(cleaned_mag[formant_bins, :] ** 2, axis=0)
     total_energy = np.sum(cleaned_mag ** 2, axis=0) + 1e-8
     frame_speech = np.clip(formant_energy / total_energy, 0.05, 1.0)
+    formant_ratio = float(np.sum(formant_energy)) / total_energy_sum
 
-    return cleaned, frame_speech, perc_ratio, snr_db
+    return cleaned, frame_speech, perc_ratio, snr_db, fund_ratio, formant_ratio
 
 def trim_silence_vad(signal_data: np.ndarray, frame_speech: np.ndarray, hop_length: int = 256, speech_threshold: float = 0.30) -> np.ndarray:
     if len(signal_data) <= WINDOW_SAMPLES:
@@ -202,7 +227,9 @@ def aggregate_salience_probabilities(chunk_probs: np.ndarray, chunk_weights: Opt
 
     salience = np.max(chunk_probs, axis=1) - np.min(chunk_probs, axis=1)
     if chunk_weights is not None and len(chunk_weights) == len(chunk_probs):
-        salience = salience * np.clip(chunk_weights, 0.1, 1.0)
+        max_w = float(np.max(chunk_weights))
+        norm_weights = (chunk_weights / max_w) if max_w > 1e-6 else chunk_weights
+        salience = salience * np.clip(norm_weights, 0.05, 1.0)
 
     exp_weights = np.exp(salience / max(temperature, 1e-3))
     weights = exp_weights / np.sum(exp_weights)
@@ -238,13 +265,57 @@ def preprocess_audio_pipeline(audio_bytes: bytes) -> Dict[str, Any]:
             "num_chunks": 0
         }
 
-    cleaned_signal, frame_speech, perc_ratio, snr_db = apply_adaptive_spectral_cleanup(raw_signal, sr=sr)
+    cleaned_signal, frame_speech, perc_ratio, snr_db, fund_ratio, formant_ratio = apply_adaptive_spectral_cleanup(raw_signal, sr=sr)
+    voiced_ratio = compute_voicing_ratio(cleaned_signal, sr=sr)
 
-    voice_activity_ratio = float(np.mean(frame_speech > 0.35))
-    if perc_ratio >= 0.85 and voice_activity_ratio < 0.15:
+    if formant_ratio < 0.20:
         return {
             "is_valid": False,
-            "error": "Không phát hiện tiếng nói con người rõ ràng trong tệp âm thanh (Phát hiện âm nhạc hoặc tạp âm môi trường không chứa giọng nói). Vui lòng cung cấp bản ghi có tiếng người nói.",
+            "error": "Không phát hiện dải tần số giọng nói con người (Tín hiệu là tạp âm tần số thấp hoặc ù điện). Vui lòng cung cấp bản ghi có tiếng người nói.",
+            "duration": duration,
+            "rms": rms_energy,
+            "chunks": None,
+            "chunk_weights": None,
+            "num_chunks": 0
+        }
+
+    if fund_ratio < 0.05:
+        return {
+            "is_valid": False,
+            "error": "Không phát hiện âm bội thanh quản giọng nói con người (Tín hiệu là âm nhạc điện tử, tiếng rít hoặc tạp âm môi trường). Vui lòng cung cấp bản ghi có tiếng người nói.",
+            "duration": duration,
+            "rms": rms_energy,
+            "chunks": None,
+            "chunk_weights": None,
+            "num_chunks": 0
+        }
+
+    if perc_ratio >= 0.40 and fund_ratio < 0.08:
+        return {
+            "is_valid": False,
+            "error": "Không phát hiện tiếng nói con người rõ ràng trong tệp âm thanh (Phát hiện âm nhạc, tiết tấu trống hoặc beat không chứa giọng nói). Vui lòng cung cấp bản ghi có tiếng người nói.",
+            "duration": duration,
+            "rms": rms_energy,
+            "chunks": None,
+            "chunk_weights": None,
+            "num_chunks": 0
+        }
+
+    if voiced_ratio < 0.12 and fund_ratio < 0.10:
+        return {
+            "is_valid": False,
+            "error": "Không phát hiện dao động thanh đới của giọng nói con người (Tạp âm ngẫu nhiên hoặc nhạc cụ nền). Vui lòng cung cấp bản ghi có tiếng người nói.",
+            "duration": duration,
+            "rms": rms_energy,
+            "chunks": None,
+            "chunk_weights": None,
+            "num_chunks": 0
+        }
+
+    if voiced_ratio < 0.08 and formant_ratio < 0.50:
+        return {
+            "is_valid": False,
+            "error": "Không phát hiện tiếng nói con người rõ ràng (Nhiễu nền môi trường không có tiếng người). Vui lòng cung cấp bản ghi có tiếng người nói.",
             "duration": duration,
             "rms": rms_energy,
             "chunks": None,
