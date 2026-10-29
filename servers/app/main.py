@@ -164,7 +164,7 @@ async def predict_emotion(file: UploadFile = File(...)):
         chunk_probs = engine.predict_chunks(chunks)
         infer_duration_ms = (time.perf_counter() - infer_start) * 1000.0
 
-        final_probs = aggregate_salience_probabilities(chunk_probs)
+        final_probs = aggregate_salience_probabilities(chunk_probs, dsp_result.get("chunk_weights"))
         
         probabilities = {
             EMOTION_MAPPING[idx]: round(float(final_probs[idx]), 4)

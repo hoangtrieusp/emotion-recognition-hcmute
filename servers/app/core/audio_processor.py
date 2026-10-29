@@ -3,6 +3,8 @@ import math
 import sys
 import numpy as np
 import soundfile as sf
+import scipy.signal as signal
+import scipy.ndimage as ndimage
 from pydub import AudioSegment
 from typing import Tuple, Dict, Any, Optional
 
@@ -43,7 +45,7 @@ def decode_audio_bytes(audio_bytes: bytes) -> Tuple[np.ndarray, int]:
                 segment = AudioSegment.from_file(bio)
                 segment = segment.set_frame_rate(TARGET_SR).set_channels(1)
                 raw_samples = np.array(segment.get_array_of_samples())
-                
+
                 if len(raw_samples) == 0:
                     raise ValueError("File âm thanh không chứa mẫu tín hiệu hợp lệ.")
 
@@ -77,58 +79,131 @@ def decode_audio_bytes(audio_bytes: bytes) -> Tuple[np.ndarray, int]:
 
     return data, sr
 
-def compute_rms(signal: np.ndarray) -> float:
-    if len(signal) == 0:
+def compute_rms(signal_data: np.ndarray) -> float:
+    if len(signal_data) == 0:
         return 0.0
-    return float(np.sqrt(np.mean(signal ** 2) + 1e-9))
+    return float(np.sqrt(np.mean(signal_data ** 2) + 1e-9))
 
-def trim_silence(signal: np.ndarray, top_db: float = 30.0, frame_length: int = 1024, hop_length: int = 256) -> np.ndarray:
-    if len(signal) <= frame_length:
-        return signal
+def apply_bandpass_filter(signal_data: np.ndarray, sr: int = TARGET_SR, lowcut: float = 80.0, highcut: float = 7500.0) -> np.ndarray:
+    if len(signal_data) < 512:
+        return signal_data.astype(np.float32)
+    sos = signal.butter(5, [lowcut, highcut], btype="bandpass", fs=sr, output="sos")
+    return signal.sosfilt(sos, signal_data).astype(np.float32)
 
-    num_frames = 1 + (len(signal) - frame_length) // hop_length
-    frames = np.lib.stride_tricks.as_strided(
-        signal,
-        shape=(num_frames, frame_length),
-        strides=(signal.strides[0] * hop_length, signal.strides[0])
-    )
-    frame_rms = np.sqrt(np.mean(frames ** 2, axis=1) + 1e-9)
-    
-    max_rms = np.max(frame_rms)
-    if max_rms <= 1e-9:
-        return signal
-    
-    db = 20 * np.log10(frame_rms / max_rms + 1e-9)
-    active_indices = np.where(db > -top_db)[0]
-    
+def apply_adaptive_spectral_cleanup(signal_data: np.ndarray, sr: int = TARGET_SR) -> Tuple[np.ndarray, np.ndarray, float, float]:
+    if len(signal_data) < 512:
+        return signal_data.astype(np.float32), np.ones(1, dtype=np.float32), 0.0, 30.0
+
+    filtered = apply_bandpass_filter(signal_data, sr=sr)
+
+    n_fft = 512
+    hop = 256
+    f, t, Zxx = signal.stft(filtered, fs=sr, nperseg=n_fft, noverlap=n_fft - hop)
+    mag = np.abs(Zxx).astype(np.float32)
+    phase = np.angle(Zxx)
+
+    harm = ndimage.median_filter(mag, size=(1, 15))
+    perc = ndimage.median_filter(mag, size=(15, 1))
+
+    harm_energy = np.mean(harm ** 2)
+    perc_energy = np.mean(perc ** 2)
+    perc_ratio = float(perc_energy / (harm_energy + 1e-8))
+
+    if perc_ratio > 0.5:
+        adaptive_margin = float(np.clip(1.0 + 3.0 * (perc_ratio - 0.5), 1.0, 4.0))
+        harm_blend = float(np.clip(0.40 + 1.2 * (perc_ratio - 0.5), 0.40, 0.98))
+    else:
+        adaptive_margin = 1.0
+        harm_blend = 0.25
+
+    mask_harm = (harm ** 2) / (harm ** 2 + (perc * adaptive_margin) ** 2 + 1e-8)
+
+    noise_floor = np.percentile(mag, 10, axis=1, keepdims=True)
+    frame_rms = np.sqrt(np.mean(mag ** 2, axis=0))
+    p90 = np.percentile(frame_rms, 90)
+    p10 = np.percentile(frame_rms, 10)
+    snr_db = float(20.0 * np.log10(p90 / (p10 + 1e-6) + 1e-4))
+
+    wiener_strength = float(np.clip(1.2 - 0.03 * (snr_db - 10.0), 0.2, 1.2))
+    snr_local = mag / (noise_floor + 1e-8)
+    wiener_gain = np.clip(1.0 - wiener_strength / (snr_local + 1e-4), 0.35, 1.0)
+
+    final_gain = (harm_blend * mask_harm + (1.0 - harm_blend)) * wiener_gain
+
+    cleaned_mag = mag * final_gain
+    _, cleaned = signal.istft(cleaned_mag * np.exp(1j * phase), fs=sr, nperseg=n_fft, noverlap=n_fft - hop)
+    cleaned = cleaned[:len(signal_data)].astype(np.float32)
+
+    formant_bins = (f >= 300) & (f <= 3400)
+    formant_energy = np.sum(cleaned_mag[formant_bins, :] ** 2, axis=0)
+    total_energy = np.sum(cleaned_mag ** 2, axis=0) + 1e-8
+    frame_speech = np.clip(formant_energy / total_energy, 0.05, 1.0)
+
+    return cleaned, frame_speech, perc_ratio, snr_db
+
+def trim_silence_vad(signal_data: np.ndarray, frame_speech: np.ndarray, hop_length: int = 256, speech_threshold: float = 0.30) -> np.ndarray:
+    if len(signal_data) <= WINDOW_SAMPLES:
+        return signal_data
+
+    active_indices = np.where(frame_speech > speech_threshold)[0]
     if len(active_indices) == 0:
-        return signal
-        
-    start_sample = max(0, active_indices[0] * hop_length)
-    end_sample = min(len(signal), (active_indices[-1] + 1) * hop_length + frame_length)
-    return signal[start_sample:end_sample]
+        return signal_data
 
-def adaptive_overlapping_chunking(signal: np.ndarray, sr: int = TARGET_SR) -> np.ndarray:
-    total_len = len(signal)
-    if total_len <= WINDOW_SAMPLES:
-        return signal[np.newaxis, :]
+    padding_frames = int(0.2 * TARGET_SR / hop_length)
+    start_frame = max(0, active_indices[0] - padding_frames)
+    end_frame = min(len(frame_speech), active_indices[-1] + padding_frames + 1)
 
+    start_sample = max(0, start_frame * hop_length)
+    end_sample = min(len(signal_data), end_frame * hop_length)
+
+    trimmed = signal_data[start_sample:end_sample]
+    if len(trimmed) < int(0.5 * TARGET_SR):
+        return signal_data
+    return trimmed
+
+def adaptive_overlapping_chunking(signal_data: np.ndarray, frame_speech: np.ndarray, sr: int = TARGET_SR) -> Tuple[np.ndarray, np.ndarray]:
+    total_len = len(signal_data)
+    hop = 256
     chunks = []
+    weights = []
+
+    if total_len <= WINDOW_SAMPLES:
+        norm = (signal_data - np.mean(signal_data)) / np.sqrt(np.var(signal_data) + 1e-7)
+        return norm[np.newaxis, :].astype(np.float32), np.array([1.0], dtype=np.float32)
+
     start = 0
     while start + WINDOW_SAMPLES <= total_len:
-        chunks.append(signal[start : start + WINDOW_SAMPLES])
+        c = signal_data[start : start + WINDOW_SAMPLES]
+        norm = (c - np.mean(c)) / np.sqrt(np.var(c) + 1e-7)
+        chunks.append(norm)
+
+        f_start = start // hop
+        f_end = (start + WINDOW_SAMPLES) // hop
+        speech_val = float(np.mean(frame_speech[f_start:f_end])) if f_end > f_start else 0.5
+        c_rms = np.sqrt(np.mean(c ** 2) + 1e-9)
+        weights.append(speech_val * min(1.0, c_rms / 0.015))
         start += HOP_SAMPLES
 
     if start < total_len:
-        chunks.append(signal[-WINDOW_SAMPLES:])
+        c = signal_data[-WINDOW_SAMPLES:]
+        norm = (c - np.mean(c)) / np.sqrt(np.var(c) + 1e-7)
+        chunks.append(norm)
+        f_start = (total_len - WINDOW_SAMPLES) // hop
+        f_end = total_len // hop
+        speech_val = float(np.mean(frame_speech[f_start:f_end]))
+        c_rms = np.sqrt(np.mean(c ** 2) + 1e-9)
+        weights.append(speech_val * min(1.0, c_rms / 0.015))
 
-    return np.stack(chunks, axis=0).astype(np.float32)
+    return np.stack(chunks).astype(np.float32), np.array(weights, dtype=np.float32)
 
-def aggregate_salience_probabilities(chunk_probs: np.ndarray, temperature: float = 0.5) -> np.ndarray:
+def aggregate_salience_probabilities(chunk_probs: np.ndarray, chunk_weights: Optional[np.ndarray] = None, temperature: float = 0.5) -> np.ndarray:
     if len(chunk_probs) == 1:
         return chunk_probs[0]
 
     salience = np.max(chunk_probs, axis=1) - np.min(chunk_probs, axis=1)
+    if chunk_weights is not None and len(chunk_weights) == len(chunk_probs):
+        salience = salience * np.clip(chunk_weights, 0.1, 1.0)
+
     exp_weights = np.exp(salience / max(temperature, 1e-3))
     weights = exp_weights / np.sum(exp_weights)
 
@@ -137,13 +212,10 @@ def aggregate_salience_probabilities(chunk_probs: np.ndarray, temperature: float
 
 def preprocess_audio_pipeline(audio_bytes: bytes) -> Dict[str, Any]:
     raw_signal, sr = decode_audio_bytes(audio_bytes)
-    
-    trimmed_signal = trim_silence(raw_signal, top_db=30.0)
-    signal = trimmed_signal if len(trimmed_signal) > 0 else raw_signal
-    
-    duration = float(len(signal) / sr)
-    rms_energy = compute_rms(signal)
-    
+
+    duration = float(len(raw_signal) / sr)
+    rms_energy = compute_rms(raw_signal)
+
     if duration < 0.5:
         return {
             "is_valid": False,
@@ -151,8 +223,10 @@ def preprocess_audio_pipeline(audio_bytes: bytes) -> Dict[str, Any]:
             "duration": duration,
             "rms": rms_energy,
             "chunks": None,
+            "chunk_weights": None,
             "num_chunks": 0
         }
+
     if rms_energy < 0.002:
         return {
             "is_valid": False,
@@ -160,17 +234,37 @@ def preprocess_audio_pipeline(audio_bytes: bytes) -> Dict[str, Any]:
             "duration": duration,
             "rms": rms_energy,
             "chunks": None,
+            "chunk_weights": None,
             "num_chunks": 0
         }
 
-    norm_signal = (signal - np.mean(signal)) / np.sqrt(np.var(signal) + 1e-7)
-    chunks = adaptive_overlapping_chunking(norm_signal, sr=sr)
-    
+    cleaned_signal, frame_speech, perc_ratio, snr_db = apply_adaptive_spectral_cleanup(raw_signal, sr=sr)
+
+    voice_activity_ratio = float(np.mean(frame_speech > 0.35))
+    if perc_ratio >= 0.85 and voice_activity_ratio < 0.15:
+        return {
+            "is_valid": False,
+            "error": "Không phát hiện tiếng nói con người rõ ràng trong tệp âm thanh (Phát hiện âm nhạc hoặc tạp âm môi trường không chứa giọng nói). Vui lòng cung cấp bản ghi có tiếng người nói.",
+            "duration": duration,
+            "rms": rms_energy,
+            "chunks": None,
+            "chunk_weights": None,
+            "num_chunks": 0
+        }
+
+    trimmed_signal = trim_silence_vad(cleaned_signal, frame_speech)
+    signal_to_chunk = trimmed_signal if len(trimmed_signal) >= int(0.5 * TARGET_SR) else cleaned_signal
+
+    chunks, chunk_weights = adaptive_overlapping_chunking(signal_to_chunk, frame_speech, sr=sr)
+
     return {
         "is_valid": True,
         "error": None,
         "chunks": chunks,
+        "chunk_weights": chunk_weights,
         "duration": duration,
         "rms": rms_energy,
-        "num_chunks": chunks.shape[0]
+        "num_chunks": chunks.shape[0],
+        "perc_ratio": round(perc_ratio, 3),
+        "snr_db": round(snr_db, 2)
     }
