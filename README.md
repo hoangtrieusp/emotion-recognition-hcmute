@@ -78,8 +78,6 @@ emotion-recognition-hcmute/
         │   ├── AudioInput.tsx        # Thu âm Micro & File Audio Dropzone
         │   ├── EmotionDashboard.tsx  # Thẻ cảm xúc chính, xác suất 4 nhãn & latency telemetry
         │   └── WaveformVisualizer.tsx# Live Audio Canvas Oscilloscope
-        └── hooks/
-            └── useAudioRecorder.ts   # Web Audio API hook
 ```
 
 ---
