@@ -14,7 +14,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
   const effectiveAnalyzing = isAnalyzing ?? isLoading ?? false;
   const [activeTab, setActiveTab] = useState<"mic" | "upload">("mic");
 
-  // Microphone state
   const [isRecording, setIsRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
@@ -22,22 +21,18 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
   const [micPreviewUrl, setMicPreviewUrl] = useState<string | null>(null);
   const [recorderError, setRecorderError] = useState<string | null>(null);
 
-  // File upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
 
-  // Audio playback state
   const [isPlaying, setIsPlaying] = useState(false);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
-  // Refs for recorder lifecycle
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Current active preview URL and name based on tab
   const currentPreviewUrl = activeTab === "mic" ? micPreviewUrl : filePreviewUrl;
   const hasAudioReady = Boolean(activeTab === "mic" ? micBlob : selectedFile);
   const displayAudioName =
@@ -49,7 +44,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
       ? selectedFile.name
       : "";
 
-  // Cleanup object URLs on unmount
   useEffect(() => {
     return () => {
       if (micPreviewUrl) URL.revokeObjectURL(micPreviewUrl);
@@ -66,7 +60,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
     };
   }, [micPreviewUrl, filePreviewUrl]);
 
-  // Bắt đầu thu âm Microphone
   const startRecording = async () => {
     if (effectiveAnalyzing) return;
     try {
@@ -76,14 +69,12 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
       }
       setIsPlaying(false);
 
-      // Xóa bản thu âm mic cũ
       if (micPreviewUrl) {
         URL.revokeObjectURL(micPreviewUrl);
         setMicPreviewUrl(null);
       }
       setMicBlob(null);
 
-      // Xin quyền Microphone
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -95,7 +86,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
       streamRef.current = stream;
       setAudioStream(stream);
 
-      // Xác định mimeType tốt nhất được trình duyệt hỗ trợ
       let mimeType = "audio/webm";
       if (typeof MediaRecorder !== "undefined") {
         if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
@@ -132,7 +122,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
         const url = URL.createObjectURL(blob);
         setMicPreviewUrl(url);
 
-        // Giải phóng audio stream tracks
         if (streamRef.current) {
           streamRef.current.getTracks().forEach((track) => track.stop());
           streamRef.current = null;
@@ -159,7 +148,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
     }
   };
 
-  // Dừng thu âm
   const stopRecording = () => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -181,7 +169,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
     }
   };
 
-  // Chọn file âm thanh từ ổ đĩa
   const handleFileChange = (file: File) => {
     if (effectiveAnalyzing) return;
     if (audioPlayerRef.current) {
@@ -194,7 +181,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
     setFilePreviewUrl(URL.createObjectURL(file));
   };
 
-  // Chuyển Tab
   const handleSwitchTab = (tab: "mic" | "upload") => {
     if (effectiveAnalyzing || isRecording) return;
     if (audioPlayerRef.current) {
@@ -204,7 +190,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
     setActiveTab(tab);
   };
 
-  // Điều khiển Phát/Dừng nghe lại
   const togglePlayAudio = () => {
     const audio = audioPlayerRef.current;
     if (!audio) return;
@@ -223,7 +208,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
     setIsPlaying(false);
   };
 
-  // Gửi âm thanh đi phân tích
   const handleSubmitAnalysis = () => {
     if (effectiveAnalyzing) return;
     if (activeTab === "mic" && micBlob) {
@@ -235,7 +219,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-      {/* Tab selection */}
       <div className="flex items-center space-x-2 border-b border-slate-200 pb-4 mb-5">
         <button
           type="button"
@@ -265,7 +248,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
         </button>
       </div>
 
-      {/* Mic Tab Content */}
       {activeTab === "mic" && (
         <div className="space-y-4">
           <WaveformVisualizer isRecording={isRecording} stream={audioStream} />
@@ -319,7 +301,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
         </div>
       )}
 
-      {/* Upload Tab Content */}
       {activeTab === "upload" && (
         <div className="space-y-4">
           <label
@@ -361,7 +342,6 @@ export default function AudioInput({ onAnalyze, isAnalyzing, isLoading }: AudioI
         </div>
       )}
 
-      {/* Audio Playback Preview & Submit Button */}
       {currentPreviewUrl && (
         <div className="mt-6 pt-5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-3 w-full sm:w-auto">

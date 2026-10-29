@@ -40,7 +40,6 @@ export default function WaveformVisualizer({ isRecording, stream }: WaveformVisu
       const height = canvas.height;
       ctx.clearRect(0, 0, width, height);
 
-      // Background gradient subtle
       const bgGrad = ctx.createLinearGradient(0, 0, width, 0);
       bgGrad.addColorStop(0, "#f1f5f9");
       bgGrad.addColorStop(1, "#f8fafc");
@@ -56,10 +55,9 @@ export default function WaveformVisualizer({ isRecording, stream }: WaveformVisu
         for (let i = 0; i < dataArray.length; i++) {
           const barHeight = (dataArray[i] / 255) * (height * 0.85);
 
-          // Bar color with vibrant indigo-to-purple gradient
           const grad = ctx.createLinearGradient(0, height - barHeight, 0, height);
-          grad.addColorStop(0, "#4f46e5"); // Indigo 600
-          grad.addColorStop(1, "#818cf8"); // Indigo 400
+          grad.addColorStop(0, "#4f46e5");
+          grad.addColorStop(1, "#818cf8");
 
           ctx.fillStyle = grad;
           ctx.beginPath();
@@ -69,7 +67,6 @@ export default function WaveformVisualizer({ isRecording, stream }: WaveformVisu
           x += barWidth;
         }
       } else {
-        // Resting wave animation
         ctx.beginPath();
         ctx.strokeStyle = "#cbd5e1";
         ctx.lineWidth = 2;

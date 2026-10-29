@@ -48,7 +48,6 @@ export default function Header() {
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        {/* Left: Branding & University info */}
         <div className="flex items-center space-x-3.5">
           <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-100">
             <Activity className="w-6 h-6" />
@@ -68,11 +67,9 @@ export default function Header() {
           </div>
         </div>
 
-        {/* Right: Hardware & Health telemetry badges */}
         <div className="flex items-center space-x-2 sm:space-x-3">
           {health ? (
             <>
-              {/* Telemetry info chip (hidden on mobile) */}
               <div className="hidden md:flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700">
                 <Cpu className="w-3.5 h-3.5 text-indigo-600" />
                 <span>
@@ -85,7 +82,6 @@ export default function Header() {
                 <span>CPU: {health.system_metrics?.cpu_usage_percent ?? 0}%</span>
               </div>
 
-              {/* Status Indicator */}
               <div className="flex items-center space-x-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 shadow-sm">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="truncate max-w-[120px] sm:max-w-none">

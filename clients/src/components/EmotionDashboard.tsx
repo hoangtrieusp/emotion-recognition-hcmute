@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { AlertTriangle, Clock, Zap, BarChart2, Flame, Smile, Meh, Frown, RefreshCw } from "lucide-react";
+import { AlertTriangle, Zap, BarChart2, Flame, Smile, Meh, Frown, RefreshCw } from "lucide-react";
 
 export interface PredictionResult {
   status: "success" | "warning" | "error";
@@ -115,7 +115,6 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
     );
   }
 
-  // Error State (e.g. Backend offline, network failure, 500 error)
   if (result.status === "error") {
     return (
       <div className="bg-white rounded-2xl border border-rose-200 p-6 shadow-sm">
@@ -142,7 +141,6 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
     );
   }
 
-  // Warning (File too short or low RMS)
   if (result.status === "warning") {
     return (
       <div className="bg-white rounded-2xl border border-amber-200 p-6 shadow-sm">
@@ -178,7 +176,6 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
 
   return (
     <div className="space-y-5">
-      {/* Dominant Emotion Hero Card */}
       <div
         className={`rounded-2xl border ${dominantConfig.borderColor} ${dominantConfig.bgColor} p-6 shadow-sm flex items-center justify-between`}
       >
@@ -209,7 +206,6 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
         </div>
       </div>
 
-      {/* Probabilities Distribution Bars */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">
           Phân bố xác suất 4 cảm xúc:
@@ -241,7 +237,6 @@ export default function EmotionDashboard({ result, isAnalyzing }: EmotionDashboa
         </div>
       </div>
 
-      {/* Technical Telemetry & Latency Card */}
       {result.telemetry && (
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center space-x-1.5">

@@ -12,10 +12,8 @@ export default function Home() {
   const abortControllerRef = React.useRef<AbortController | null>(null);
 
   const handleAnalyze = async (fileOrBlob: File | Blob) => {
-    // 1. Chống Race Condition: Nếu đang phân tích thì block ngay lập tức
     if (isAnalyzing) return;
 
-    // Hủy request trước đó nếu còn đang treo
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -30,7 +28,6 @@ export default function Home() {
       if (fileOrBlob instanceof File) {
         formData.append("file", fileOrBlob, fileOrBlob.name);
       } else {
-        // Chốt chặn 2: Đảm bảo Blob luôn được bọc thành File với MIME type chuẩn xác ('audio/webm' hoặc 'audio/wav')
         const rawType = fileOrBlob.type || "audio/webm";
         const cleanType = rawType.includes("wav") ? "audio/wav" : "audio/webm";
         const extension = cleanType === "audio/wav" ? "wav" : "webm";
@@ -59,7 +56,7 @@ export default function Home() {
       setResult(data);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
-        return; // Bỏ qua nếu bị abort do người dùng
+        return;
       }
       setResult({
         status: "error",
@@ -76,7 +73,6 @@ export default function Home() {
       <Header />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Intro banner */}
         <div className="mb-8 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-base font-bold text-slate-900">
@@ -92,21 +88,17 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 2-Column Responsive Dashboard Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column: Audio Input & Recording (7 cols) */}
           <div className="lg:col-span-7">
             <AudioInput onAnalyze={handleAnalyze} isAnalyzing={isAnalyzing} />
           </div>
 
-          {/* Right Column: Emotion Analysis Results (5 cols) */}
           <div className="lg:col-span-5">
             <EmotionDashboard result={result} isAnalyzing={isAnalyzing} />
           </div>
         </div>
       </main>
 
-      {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-4 mt-auto">
         <div className="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500 font-medium">
           Hệ Thống Nhận Diện Cảm Xúc Giọng Nói Tiếng Việt © 2026
